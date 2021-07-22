@@ -109,7 +109,7 @@ function report(
         if count(i -> i isa IndelError, protein.errors) > 3
             N = length(protein.errors)
             filter!(i -> !isa(i, IndelError), protein.errors)
-            n_indel_errors = length(protein.errors) - N
+            n_indel_errors = N - length(protein.errors)
             push!(protein.errors, ErrorTooManyIndels(n_indel_errors))
         end
 

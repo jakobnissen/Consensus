@@ -25,15 +25,11 @@ function load_depths(
     alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
     depthspaths::Vector{String}
 )::Vector{SegmentTuple{Option{Depths}}}
-
-    res = SegmentTuple{Option{Depths}}[]
-    # TODO: Parallelize?
-    for (alnasm, depthspath) in zip(alnasms, depthspaths)
+    zip(alnasms, depthspaths) |> Map() do (alnasm, depthspath)
         depths = parse_depths(depthspath)
         add_depths_errors!(alnasm, depths)
-        push!(res, depths)
-    end
-    return res
+        depths
+    end |> Folds.collect
 end
 
 function parse_depths(path::String)::SegmentTuple{Option{Depths}}

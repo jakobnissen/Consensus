@@ -33,7 +33,6 @@ function Base.print(io::IO, x::ErrorTooManyIndels)
     print(io, "Too many indel errors, found ", x.n)
 end
 
-# TODO: Difference between depths in kma and kma2? Think about it!
 # TODO: Superinfection?
 
 const _IMPORTANT = Tuple(Bool[1,1,0,0,1,0,1,1,1,1,1,1,1,0,1,1,1])

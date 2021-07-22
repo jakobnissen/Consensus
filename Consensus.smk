@@ -134,7 +134,7 @@ if IS_ILLUMINA:
         params:
             db=REFOUTDIR + "/dedup",
             outbase="tmp/aln/{basename}/sparse"
-        threads: 1
+        threads: 2
         log: "tmp/log/aln/{basename}.initial.log"
         shell:
             # Here, not sure if I should sort by template cov (-ss c) or not.
@@ -283,7 +283,6 @@ if IS_ILLUMINA:
         output:
             res="tmp/aln/{basename}/kma2.res",
             fsa="tmp/aln/{basename}/kma2.fsa",
-            mat="tmp/aln/{basename}/kma2.mat.gz"
         params:
             db="tmp/aln/{basename}/cat.trimmed",
             outbase="tmp/aln/{basename}/kma2",
