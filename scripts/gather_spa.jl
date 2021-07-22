@@ -57,7 +57,7 @@ function collect_sequences(
     end
     isempty(present) && return records
 
-    fastapath = joinpath(refdir, "dedup.fna")
+    fastapath = joinpath(refdir, "refs.fna")
     open(FASTA.Reader, fastapath) do reader
         seqnum = UInt(0)
         record = FASTA.Record()

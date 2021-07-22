@@ -85,14 +85,14 @@ rule all:
 # REFERENCE-ONLY PART OF PIPELINE
 #################################
 rule index_ref:
-    input: REFDIR + "/dedup.fna"
+    input: REFDIR + "/refs.fna"
     output:
-        comp=REFOUTDIR + "/dedup.comp.b",
-        name=REFOUTDIR + "/dedup.name",
-        length=REFOUTDIR + "/dedup.length.b",
-        seq=REFOUTDIR + "/dedup.seq.b"
+        comp=REFOUTDIR + "/refs.comp.b",
+        name=REFOUTDIR + "/refs.name",
+        length=REFOUTDIR + "/refs.length.b",
+        seq=REFOUTDIR + "/refs.seq.b"
     params:
-        outpath=REFOUTDIR + "/dedup",
+        outpath=REFOUTDIR + "/refs",
     log: "tmp/log/kma_ref.log"
     
     shell: "kma index -k 12 -Sparse - -i {input} -o {params.outpath} 2> {log}"
@@ -132,7 +132,7 @@ if IS_ILLUMINA:
             index=rules.index_ref.output
         output: "tmp/aln/{basename}/sparse.spa"
         params:
-            db=REFOUTDIR + "/dedup",
+            db=REFOUTDIR + "/refs",
             outbase="tmp/aln/{basename}/sparse"
         threads: 2
         log: "tmp/log/aln/{basename}.initial.log"
@@ -167,7 +167,7 @@ elif IS_NANOPORE:
             index=rules.index_ref.output
         output: "tmp/aln/{basename}/sparse.spa"
         params:
-            db=REFOUTDIR + "/dedup", # same as index_reffile param
+            db=REFOUTDIR + "/refs", # same as index_reffile param
             outbase="tmp/aln/{basename}/sparse"
         threads: 1
         log: "tmp/log/aln/{basename}.initial.log"
