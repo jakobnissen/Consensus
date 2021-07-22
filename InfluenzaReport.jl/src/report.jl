@@ -123,8 +123,8 @@ function report(
 end
 
 function print_segment_header(buf::IOBuffer, alnasm::AlignedAssembly, depth::Depths)
-    print(buf, " identity $(@sprintf "%.3f" (alnasm.identity))")
-    println(buf, " depth $(@sprintf "%.2e" depth.mean_depth) coverage $(@sprintf "%.3f" depth.coverage)")
+    print(buf, " identity $(@sprintf "%.3f" (alnasm.identity)),")
+    println(buf, " depth $(@sprintf "%.2e" depth.mean_depth), coverage $(@sprintf "%.3f" depth.coverage)")
 end
 
 # fallback: segment errors fails, proteinerrors fail if protein is critical

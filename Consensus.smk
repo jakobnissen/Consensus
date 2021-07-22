@@ -5,16 +5,11 @@ SNAKEDIR = os.path.dirname(workflow.snakefile)
 sys.path.append(os.path.join(SNAKEDIR, "scripts"))
 import tools
 
-# We only need this because Julia 1.6 segfaults with PkgCompiler at the moment
-SYSIMG_PATH = os.path.join(SNAKEDIR, "scripts", "sysimg", "sysimg.so")
-
-# TODO: I've removed -J {SYSIMG_PATH} here while I rewrite the workflow. Can be re-added later.
 JULIA_COMMAND = f"julia --startup-file=no --project={SNAKEDIR}"
 
 ######################################################
 # GLOBAL CONSTANTS
 ######################################################
-# ------ Readdir -------
 if "readdir" not in config:
     raise KeyError("You must supply read path: '--config readdir=path/to/reads'")
 
@@ -42,6 +37,14 @@ if IS_NANOPORE:
         raise ValueError(f"Pore must be 9 or 10, not '{config['pore']}'")
     PORE = str(config["pore"])
 
+# Pass in the reference directory
+if "ref" not in config:
+    raise KeyError("You must supply reference directory: '--config ref=/path/to/ref'")
+
+REFDIR = config["ref"]
+if not os.path.isdir(REFDIR):
+    raise NotADirectoryError(REFDIR)
+
 if IS_ILLUMINA:
     READS = tools.get_read_pairs(READDIR)
 else:
@@ -49,8 +52,8 @@ else:
 
 BASENAMES = sorted(READS.keys())
 
-REFSEQDIR = os.path.join(SNAKEDIR, "ref", "seqs")
-REFOUTDIR = os.path.join(SNAKEDIR, "refout")
+REFSEQDIR = os.path.join(REFDIR, "seqs")
+REFOUTDIR = os.path.join(REFDIR, "refout")
 
 # We have to create this directories either in a rule or outside the DAG to not
 # mess up the DAG.
@@ -63,7 +66,6 @@ SEGMENTS = sorted([fn.rpartition('.')[0] for fn in os.listdir(REFSEQDIR) if fn.e
 # Start of pipeline
 ######################################################
 
-# TODO: After report.jl refactor, check all outputs are present here.
 def done_input(wildcards):
     # Add report and the commit
     inputs = ["report.txt"]
@@ -242,7 +244,7 @@ elif IS_NANOPORE:
 rule remove_primers:
     input:
         con=rules.first_kma_map.output.fsa,
-        primers=f"{SNAKEDIR}/ref/primers.fna"
+        primers=f"{REFDIR}/primers.fna"
     output: temp("tmp/aln/{basename}/cat.trimmed.fna")
     log: "tmp/log/consensus/remove_primers_{basename}.txt"
     params:
@@ -250,9 +252,13 @@ rule remove_primers:
         scriptpath=f"{SNAKEDIR}/scripts/trim_consensus.jl",
         minmatches=4,
         fuzzylen=8,
-    shell:
-        "{params.juliacmd} {params.scriptpath} {input.primers} "
-        "{input.con} {output} {params.minmatches} {params.fuzzylen} > {log}"
+    shell: """if [ -s {input.primers} ]; then
+    {params.juliacmd} {params.scriptpath} {input.primers} \
+{input.con} {output} {params.minmatches} {params.fuzzylen} > {log}
+else
+    cp {input.con} {output}
+fi
+"""
 
 if IS_ILLUMINA:
     # We now re-map to the created consensus sequence in order to accurately
@@ -337,7 +343,7 @@ elif IS_NANOPORE:
             report="report.txt",
         params:
             juliacmd=JULIA_COMMAND,
-            scriptpath=f"{SNAKEDIR}/scripts/InfluenzaReport/src/InfluenzaReport.jl",
+            scriptpath=f"{SNAKEDIR}/scripts/report.jl",
             refdir=REFSEQDIR
         log: "tmp/log/report.txt"
         threads: workflow.cores

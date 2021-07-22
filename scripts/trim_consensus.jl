@@ -72,6 +72,7 @@ function trim_consensus(primerpath::String, consensuspath::String, output::Strin
 minlength::Int, fuzzylen::Int)
     consensus = load_consensus(consensuspath)
     primers = load_primers(primerpath)
+    isempty(primers) && return # if users specifies no primers
     open(FASTA.Writer, output) do writer
         for (header, seq) in consensus
             if !isempty(primers)
