@@ -52,7 +52,6 @@ else:
 
 BASENAMES = sorted(READS.keys())
 
-REFSEQDIR = os.path.join(REFDIR, "seqs")
 REFOUTDIR = os.path.join(REFDIR, "refout")
 
 # We have to create this directories either in a rule or outside the DAG to not
@@ -60,7 +59,7 @@ REFOUTDIR = os.path.join(REFDIR, "refout")
 if not os.path.isdir(REFOUTDIR):
     os.mkdir(REFOUTDIR)
 
-SEGMENTS = sorted([fn.rpartition('.')[0] for fn in os.listdir(REFSEQDIR) if fn.endswith(".fna")])
+SEGMENTS = ["PB2", "PB1", "PA", "HA", "NP", "NA", "MP", "NS"]
 
 ######################################################
 # Start of pipeline
@@ -86,15 +85,15 @@ rule all:
 # REFERENCE-ONLY PART OF PIPELINE
 #################################
 rule index_ref:
-    input: REFSEQDIR + "/{segment}.fna"
+    input: REFDIR + "/dedup.fna"
     output:
-        comp=REFOUTDIR + "/{segment,[a-zA-Z0-9]+}.comp.b",
-        name=REFOUTDIR + "/{segment,[a-zA-Z0-9]+}.name",
-        length=REFOUTDIR + "/{segment,[a-zA-Z0-9]+}.length.b",
-        seq=REFOUTDIR + "/{segment,[a-zA-Z0-9]+}.seq.b"
+        comp=REFOUTDIR + "/dedup.comp.b",
+        name=REFOUTDIR + "/dedup.name",
+        length=REFOUTDIR + "/dedup.length.b",
+        seq=REFOUTDIR + "/dedup.seq.b"
     params:
-        outpath=REFOUTDIR + "/{segment}",
-    log: "tmp/log/kma_ref/{segment}.log"
+        outpath=REFOUTDIR + "/dedup",
+    log: "tmp/log/kma_ref.log"
     
     shell: "kma index -k 12 -Sparse - -i {input} -o {params.outpath} 2> {log}"
 
@@ -131,12 +130,12 @@ if IS_ILLUMINA:
             fw=rules.fastp.output.fw,
             rv=rules.fastp.output.rv,
             index=rules.index_ref.output
-        output: "tmp/aln/{basename}/{segment,[A-Z0-9]+}.spa"
+        output: "tmp/aln/{basename}/sparse.spa"
         params:
-            db=REFOUTDIR + "/{segment}", # same as index_reffile param
-            outbase="tmp/aln/{basename}/{segment}"
+            db=REFOUTDIR + "/dedup",
+            outbase="tmp/aln/{basename}/sparse"
         threads: 1
-        log: "tmp/log/aln/{basename}_{segment}.initial.log"
+        log: "tmp/log/aln/{basename}.initial.log"
         shell:
             # Here, not sure if I should sort by template cov (-ss c) or not.
             # Pro: We mostly care about having a fully-covered template, not a partially
@@ -144,7 +143,7 @@ if IS_ILLUMINA:
             # Con: Majority vote will win away, so it'll just fuck up if we pick a
             # uniformly, but low covered reference anyway
             "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
-            "-ss c -t {threads} -Sparse 2> {log}"
+            "-ss c -t {threads} -Sparse 2> {log}"        
 
 elif IS_NANOPORE:
     rule fastp:
@@ -166,12 +165,12 @@ elif IS_NANOPORE:
         input:
             reads=rules.fastp.output.reads,
             index=rules.index_ref.output
-        output: "tmp/aln/{basename}/{segment,[A-Z0-9]+}.spa"
+        output: "tmp/aln/{basename}/sparse.spa"
         params:
-            db=REFOUTDIR + "/{segment}", # same as index_reffile param
-            outbase="tmp/aln/{basename}/{segment}"
+            db=REFOUTDIR + "/dedup", # same as index_reffile param
+            outbase="tmp/aln/{basename}/sparse"
         threads: 1
-        log: "tmp/log/aln/{basename}_{segment}.initial.log"
+        log: "tmp/log/aln/{basename}.initial.log"
         shell:
             # See above comment in rule with same name
             "kma -i {input.reads} -o {params.outbase} -t_db {params.db} "
@@ -179,12 +178,12 @@ elif IS_NANOPORE:
 
 ### Both platforms
 rule collect_best_templates:
-    input: expand("tmp/aln/{basename}/{segment}.spa", segment=SEGMENTS, basename=BASENAMES)
+    input: expand("tmp/aln/{basename}/sparse.spa", basename=BASENAMES)
     output: expand("tmp/aln/{basename}/cat.fna", basename=BASENAMES)
     params:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/gather_spa.jl",
-        refpath=REFSEQDIR
+        refpath=REFDIR
     shell: "{params.juliacmd} {params.scriptpath} tmp/aln {params.refpath}"
 
 rule first_kma_index:
@@ -308,7 +307,7 @@ if IS_ILLUMINA:
         params:
             juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
-            refdir=REFSEQDIR
+            refdir=REFDIR
         log: "tmp/log/report.txt"
         threads: workflow.cores
         run:

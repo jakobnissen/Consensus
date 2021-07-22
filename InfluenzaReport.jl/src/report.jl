@@ -8,7 +8,7 @@ function illumina_snakemake_entrypoint(
     basenames = sort!(readdir(aln_dir))
 
     asm_paths = [joinpath(aln_dir, basename, "kma2.fsa") for basename in basenames]
-    aln_asms = load_aligned_assemblies(asm_paths, ref_dir, true)
+    aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "dedup.jls"), true)
 
     kma2_paths = [joinpath(aln_dir, basename, "kma2.res") for basename in basenames]
     kma2_identity_check(aln_asms, kma2_paths)
@@ -31,7 +31,7 @@ function nanopore_snakemake_entrypoint(
     basenames = sort!(readdir(aln_dir))
 
     asm_paths = [joinpath(aln_dir, basename, "medaka", "consensus.fasta") for basename in basenames]
-    aln_asms = load_aligned_assemblies(asm_paths, ref_dir, false)
+    aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "dedup.jls"), false)
 
     depthpaths = [joinpath(aln_dir, basename, "kma1.mat.gz") for basename in basenames]
     depths = load_depths(aln_asms, depthpaths)

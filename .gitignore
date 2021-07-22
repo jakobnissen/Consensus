@@ -5,3 +5,4 @@ build
 site
 /Manifest.toml
 *.code-workspace
+__pycache__

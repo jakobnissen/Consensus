@@ -1,10 +1,10 @@
 function load_aligned_assemblies(
     asm_paths::Vector{String},
-    ref_dir::AbstractString,
+    jlspath::AbstractString,
     is_kma::Bool,
 )::Vector{SegmentTuple{Option{AlignedAssembly}}}
     asms = map(path -> load_assembly(path, is_kma), asm_paths)
-    refs = find_references(asms, ref_dir)
+    refs = find_references(asms, jlspath)
 
     zip(asms, refs) |> Map() do (asm, ref)
         ntuple = SegmentTuple(zip(asm, ref))
@@ -41,55 +41,37 @@ end
 
 function find_references(
     asms::Vector{SegmentTuple{Option{Assembly}}},
-    refdir::AbstractString
+    jlspath::AbstractString
 )::Vector{SegmentTuple{Option{Reference}}}
 
-    # Make a segment => [accessions ... ] dict
-    accession_dict = Dict(s => Set{String}() for s in instances(Segment))
-    for asm in asms
-        for maybe_asm in asm
-            assembly::Assembly = @unwrap_or maybe_asm continue
-            push!(accession_dict[unwrap(assembly.segment)], assembly.name)
-        end
+    accessions = Set{String}()
+    for asmt in asms, masm in asmt
+        acc = (@unwrap_or masm continue).name
+        push!(accessions, acc)
     end
 
-    # Make a segment => Dict(accession => reference) nested dict
-    reference_map = Dict(
-        segment => load_ref_file(segment, refdir, accessions)
-        for (segment, accessions) in accession_dict
-    )
-
-    # Look up in the dict to return the result
-    asms |> Map() do asm
-        map(asm) do maybe_asm
-            and_then(Reference, maybe_asm) do asm
-                reference_map[unwrap(asm.segment)][asm.name]
-            end
-        end
-    end |> collect
-end
-
-function load_ref_file(
-    segment::Segment,
-    refdir::AbstractString,
-    accessions::Set{String},
-)::Dict{String, Reference}
-    result = Dict{String, Reference}()
+    byaccession = Dict{String, Reference}()
     added_accessions = Set{String}()
-    jlspath = joinpath(refdir, "$segment.jls")
     for reference in Influenza.load_references(jlspath)
         if reference.name in accessions
             push!(added_accessions, reference.name)
-            result[reference.name] = reference
+            byaccession[reference.name] = reference
         end
     end
-
-    # Check we added all accessions and return
     missing_acc = setdiff(accessions, added_accessions)
     if !isempty(missing_acc)
         error("Accession $(first(missing_acc)) missing from $jlspath")
     end
-    return result
+
+    return map(asms) do asmt
+        map(asmt) do masm
+            if is_error(masm)
+                none(Reference)
+            else
+                some(byaccession[unwrap(masm).name])
+            end
+        end
+    end
 end
 
 function add_alnasm_errors!(alnasm::AlignedAssembly)

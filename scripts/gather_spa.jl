@@ -9,68 +9,69 @@ import KMATools
 
 imap(f) = x -> Iterators.map(f, x)
 ifilter(f) = x -> Iterators.filter(f, x)
+const N_SEGMENTS = length(instances(Segment))
+const SegmentTuple{T} = NTuple{N_SEGMENTS, T}
 
 "Get the highest query coverage if template coverage > 30%, else highest template coverage.
 The idea is that if template coverage is 30%, then it's good enough to build an assembly,
 and ultimately, query coverage will dominate the consensus anyway. Furthermore, small
 levels of contamination will throw off template coverage, but not query coverage."
-function readspa(path::AbstractString)::Option{UInt}
-    tuples = open(io -> KMATools.parse_spa(io, path), path)
+function readspa(path::AbstractString)::SegmentTuple{Option{UInt}}
+    # criteria by which one row is better than another
     isbetter(a, b) = min(a.tcov, b.tcov) > 0.3 ? (a.qcov > b.qcov) : (a.tcov > b.tcov)
-    isempty(tuples) ? none : some(first(sort!(tuples, lt=isbetter)).num)
-end
 
-"Get a dict: basename => (HA => 5) for all present, mapping segments"
-function make_numdict(alndir::AbstractString)::Dict{String, Vector{Tuple{Segment, UInt}}}
-    readdir(alndir) |> imap() do basename
-        # Iterator of (segment, maybe_num)
-        instances(Segment) |> imap() do segment
-            (segment, readspa(joinpath(alndir, basename, string(segment) * ".spa")))
-        end |>
-        # Remove the nones (interestingly, Julia PR 38905 should let the compiler
-        # remove the branch in the following unwrap due to this ifilter here. Cool stuff.)
-        ifilter() do (segment, maybe_num)
-            !is_error(maybe_num)
-        end |>
-        # Unwrap the nones
-        imap() do (segment, maybe_num)
-            (segment, unwrap(maybe_num))
-        end |>
-        # Convert iterator to (basename, [elements])
-        (it -> (basename, collect(it)))
-    end |>
-    Dict
-end
-
-function collect_sequences(refdir::AbstractString, numdict::Dict{String, Vector{Tuple{Segment, UInt}}})
-    # First get a Dict("HA" => Set(1, 2, 3)) of present nums
-    present = Dict{Segment, Set{UInt}}()
-    for (basename, vec) in numdict, (segment, num) in vec
-        push!(get!(Set{UInt}, present, segment), num)
+    rows = open(io -> KMATools.parse_spa(io, path), path)
+    bysegment = Dict{Segment, Vector{eltype(rows)}}()
+    for row in rows
+        segment = let
+            p = findlast('_', row.template)
+            s = p === nothing ? nothing : tryparse(Segment, row.template[p+1:end])
+            if s === nothing
+                error(
+                    "In file ", path, " expected header of format \"[NAME]_[SEGMENT]\" got \"",
+                    row.template, '"'
+                )
+            else
+                s
+            end
+        end
+        push!(get!(valtype(bysegment), bysegment, segment), row)
     end
+    result = fill(none(UInt), N_SEGMENTS)
+    for (segment, rows) in bysegment
+        result[Integer(segment) + 0x01] = some(first(sort!(rows, lt=isbetter)).num)
+    end
+    return SegmentTuple(result)
+end
 
-    # Then iterate over all segments, fetching the ones in the set
-    records = Dict{Segment, Dict{UInt, FASTA.Record}}()
-    for (segment, set) in present
-        isempty(set) && continue
-        dict = Dict{UInt, FASTA.Record}()
-        records[segment] = dict
-        fastapath = joinpath(refdir, string(segment) * ".fna")
-        open(FASTA.Reader, fastapath) do reader
-            seqnum = UInt(0)
-            record = FASTA.Record()
-            lastnum = maximum(set)
-            while !eof(reader)
-                read!(reader, record)
-                seqnum += UInt(1)
-                if in(seqnum, set)
-                    dict[seqnum] = copy(record)
-                end
-                seqnum == lastnum && break
+function collect_sequences(
+        refdir::AbstractString,
+        numbers::Vector{Tuple{String, SegmentTuple{Option{UInt}}}}
+)::Dict{UInt, FASTA.Record}
+    # First get a set of present nums
+    records = Dict{UInt, FASTA.Record}()
+    present = Set{UInt}()
+    for (basename, stuple) in numbers, (i, mnum) in enumerate(stuple)
+        num = @unwrap_or mnum continue
+        push!(present, num)
+    end
+    isempty(present) && return records
+
+    fastapath = joinpath(refdir, "dedup.fna")
+    open(FASTA.Reader, fastapath) do reader
+        seqnum = UInt(0)
+        record = FASTA.Record()
+        lastnum = maximum(present)
+        while !eof(reader)
+            read!(reader, record)
+            seqnum += UInt(1)
+            if in(seqnum, present)
+                records[seqnum] = copy(record)
             end
-            if seqnum < lastnum
-                error("FASTA $fastapath requested num $lastnum, has only $seqnum records")
-            end
+            seqnum == lastnum && break
+        end
+        if seqnum < lastnum
+            error("FASTA $fastapath requested num $lastnum, has only $seqnum records")
         end
     end
     return records
@@ -78,14 +79,15 @@ end
 
 function dump_sequences(
     alndir::AbstractString,
-    numdict::Dict{String, Vector{Tuple{Segment, UInt}}},
-    records::Dict{Segment, Dict{UInt, FASTA.Record}}
+    numbers::Vector{Tuple{String, SegmentTuple{Option{UInt}}}},
+    records::Dict{UInt, FASTA.Record}
 )
-    for (basename, vec) in numdict
+    for (basename, stuple) in numbers
         writer = open(FASTA.Writer, joinpath(alndir, basename, "cat.fna"))
-        for (segment, num) in vec
-            record = records[segment][num]
-            header = FASTA.identifier(record)::String * '_' * string(segment)
+        for (i, mnum) in enumerate(stuple)
+            num = @unwrap_or mnum continue
+            record = records[num]
+            header = FASTA.identifier(record)::String * '_' * string(Segment(i - 1))
             newrecord = FASTA.Record(header, FASTA.sequence(LongDNASeq, record))
             write(writer, newrecord)
         end
@@ -94,9 +96,11 @@ function dump_sequences(
 end
 
 function main(alndir::AbstractString, refdir::AbstractString)
-    numdict = make_numdict(alndir)
-    records = collect_sequences(refdir, numdict)
-    dump_sequences(alndir, numdict, records)
+    numbers = readdir(alndir) |> imap() do basename
+        (basename, readspa(joinpath(alndir, basename, "sparse.spa")))
+    end |> collect
+    records = collect_sequences(refdir, numbers)
+    dump_sequences(alndir, numbers, records)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
