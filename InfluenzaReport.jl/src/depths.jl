@@ -1,8 +1,8 @@
 struct Depths
-    # depths: Depth where majority is not deletion
+    # depths: Depth of the non-deleted bases.
+    # this is not measures like coverage. If a base is inserted, it counts towards
+    # depths, but not coverage.
     depths::Vector{UInt32}
-    # Cov: Where reference is not deletion
-    refdepths::Vector{UInt32}
     mean_depth::Float64
     coverage::Float64
 end
@@ -18,7 +18,7 @@ function Depths(depths::Vector{UInt32}, refdepths::Vector{UInt32})
     else
         sum(!iszero, refdepths) / length(refdepths)
     end
-    Depths(depths, refdepths, mean_depth, coverage)
+    Depths(depths, mean_depth, coverage)
 end
 
 function load_depths(
@@ -29,21 +29,17 @@ function load_depths(
     res = SegmentTuple{Option{Depths}}[]
     # TODO: Parallelize?
     for (alnasm, depthspath) in zip(alnasms, depthspaths)
-        mat = open(GzipDecompressorStream, depthspath) do io
-            KMATools.parse_mat(io, depthspath)
-        end
-        depths = parse_depths(mat, alnasm, depthspath)
+        depths = parse_depths(depthspath)
         add_depths_errors!(alnasm, depths)
         push!(res, depths)
     end
     return res
 end
 
-function parse_depths(
-    mat::Vector{Tuple{String, Vector{Tuple{DNA, NTuple{6, UInt32}}}}},
-    alnasm::SegmentTuple{Option{AlignedAssembly}},
-    path::String
-)::SegmentTuple{Option{Depths}}
+function parse_depths(path::String)::SegmentTuple{Option{Depths}}
+    mat = open(GzipDecompressorStream, path) do io
+        KMATools.parse_mat(io, path)
+    end
     result = fill(none(Depths), N_SEGMENTS)
     for (header, rows) in mat
         segment::Segment = let
@@ -53,10 +49,6 @@ function parse_depths(
         end
         index = Integer(segment) + 0x01
 
-        # If the alnasm is none, just leave depths as none, too
-        if is_error(alnasm[index])
-            continue
-        end
         if !is_error(result[index])
             error("Segment $segment present twice in $string")
         end
@@ -65,7 +57,7 @@ function parse_depths(
         refdepthvec = UInt32[]
         for (refbase, rowdepths) in rows
             rowdepth = sum(rowdepths[1:4]) # only add A,C,G,T, skip N
-            if argmax(rowdepths) != 6
+            if rowdepths[6] != maximum(rowdepths)
                 push!(depthvec, rowdepth)
             end
             if !isgap(refbase)

@@ -291,7 +291,7 @@ if IS_ILLUMINA:
         threads: 2
         run:
             shell("kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}")
+            "-t {threads} -1t1 -gapopen -5 -nf 2> {log}")
 
     rule create_report:
         input:
