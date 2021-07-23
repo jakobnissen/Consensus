@@ -87,7 +87,7 @@ function dump_sequences(
         for (i, mnum) in enumerate(stuple)
             num = @unwrap_or mnum continue
             record = records[num]
-            header = FASTA.identifier(record)::String * '_' * string(Segment(i - 1))
+            header = FASTA.identifier(record)::String
             newrecord = FASTA.Record(header, FASTA.sequence(LongDNASeq, record))
             write(writer, newrecord)
         end
