@@ -69,7 +69,6 @@ def done_input(wildcards):
     # Add report and the commit
     inputs = ["report.txt"]
 
-    # Add trimmed FASTQ
     for basename in BASENAMES:
         inputs.append(f"consensus/{basename}/consensus.fna")
 

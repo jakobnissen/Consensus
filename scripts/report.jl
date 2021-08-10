@@ -1,3 +1,5 @@
+fludirname = dirname(dirname(abspath(@__FILE__)))
+push!(LOAD_PATH, joinpath(fludirname, "InfluenzaReport.jl"))
 using InfluenzaReport
 
 if abspath(PROGRAM_FILE) == @__FILE__
@@ -16,13 +18,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
     end
 
     reportpath = joinpath(outdir, "report.txt")
-    alndir = joinpath(outdir, "tmp/aln")
+    tmpdir = joinpath(outdir, "tmp")
+    alndir = joinpath(tmpdir, "aln")
     consdir = joinpath(outdir, "consensus")
     plotdir = joinpath(outdir, "depths")
     
     if illumina
-        InfluenzaReport.illumina_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir)
+        InfluenzaReport.illumina_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
     else
-        InfluenzaReport.nanopore_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir)
+        InfluenzaReport.nanopore_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
     end
 end
