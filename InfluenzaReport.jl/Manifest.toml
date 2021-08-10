@@ -302,7 +302,7 @@ version = "1.0.0"
 
 [[Influenza]]
 deps = ["BioAlignments", "BioSequences", "ErrorTypes", "FASTX", "InfluenzaCore", "Printf", "Serialization"]
-path = "/Users/jakobnissen/code/SSIRegistry/Influenza.jl"
+git-tree-sha1 = "1ec0e449c63919b53d966d6f828dc6afd79ab334"
 uuid = "094bb4ec-04e4-4f11-bf12-e5749f7dd418"
 version = "0.3.0"
 
@@ -362,7 +362,7 @@ version = "2.1.0+0"
 
 [[KMATools]]
 deps = ["BioSymbols"]
-path = "/Users/jakobnissen/code/SSIRegistry/KMATools.jl/"
+git-tree-sha1 = "c9322c6fca9fd45d1fb5ee4e7005519ef0787b74"
 uuid = "f2dc44fa-c02b-42d6-8c22-04adf9d07357"
 version = "0.1.0"
 
@@ -463,7 +463,7 @@ uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
 [[LinearAlgebra]]
-deps = ["Libdl", "libblastrampoline_jll"]
+deps = ["Libdl"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[Logging]]
@@ -525,10 +525,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "7937eda4681660b4d6aeeecc2f7e1c81c8ee4e2f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.5+0"
-
-[[OpenBLAS_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
-uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
 
 [[OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -958,10 +954,6 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "acc685bcf777b2202a904cdcb49ad34c2fa1880c"
 uuid = "0ac62f75-1d6f-5e53-bd7c-93b484bb37c0"
 version = "0.14.0+4"
-
-[[libblastrampoline_jll]]
-deps = ["Artifacts", "Libdl", "OpenBLAS_jll", "Pkg"]
-uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
 
 [[libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]

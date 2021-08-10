@@ -3,7 +3,8 @@ function illumina_snakemake_entrypoint(
     ref_dir::AbstractString, # dir of .fna + .jls ref files
     aln_dir::AbstractString, # dir of medaka / kma aln
     cons_dir::AbstractString,
-    depths_plot_dir::AbstractString
+    depths_plot_dir::AbstractString,
+    tmp_dir::AbstractString
 )::Nothing
     basenames = sort!(readdir(aln_dir))
 
@@ -18,7 +19,7 @@ function illumina_snakemake_entrypoint(
     plot_depths(depths_plot_dir, basenames, depths)
 
     passes = report(report_path, basenames, aln_asms, depths)
-    write_consensus(cons_dir, basenames, aln_asms, passes)
+    write_files(cons_dir, tmp_dir, basenames, aln_asms, passes)
 end
 
 function nanopore_snakemake_entrypoint(
@@ -26,7 +27,8 @@ function nanopore_snakemake_entrypoint(
     ref_dir::AbstractString, # dir of .fna + .jls ref files
     aln_dir::AbstractString, # dir of medaka / kma aln
     cons_dir::AbstractString,
-    depths_plot_dir::AbstractString
+    depths_plot_dir::AbstractString,
+    tmp_dir::AbstractString
 )::Nothing
     basenames = sort!(readdir(aln_dir))
 
@@ -38,7 +40,7 @@ function nanopore_snakemake_entrypoint(
     plot_depths(depths_plot_dir, basenames, depths)
 
     passes = report(report_path, basenames, aln_asms, depths)
-    write_consensus(cons_dir, basenames, aln_asms, passes)
+    write_files(cons_dir, tmp_dir, basenames, aln_asms, passes)
 end
 
 # This function has a bit weird logical flow, because it's easiest to print

@@ -126,6 +126,19 @@ function kma2_identity_check(
     end
 end
 
+function write_files(
+    cons_dirname::AbstractString,
+    tmp_dirname::AbstractString,
+    basenames::Vector{String},
+    alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
+    passes::Vector{SegmentTuple{Bool}}
+)
+    open(joinpath(tmp_dirname, "aln_asms.jl"), "w") do io
+        serialize_alnasms(io, alnasms, passes)
+    end
+    write_consensus(cons_dirname, basenames, alnasms, passes)
+end
+
 function write_consensus(
     dirname::AbstractString,
     basenames::Vector{String},

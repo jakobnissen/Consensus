@@ -17,6 +17,7 @@ using Transducers
 using Folds
 using Plots
 using CodecZlib
+using Serialization
 
 using Influenza: Assembly, Reference, AlignedAssembly
 
@@ -38,6 +39,20 @@ end
 const _IMPORTANT = Tuple(Bool[1,1,0,0,1,0,1,1,1,1,1,1,1,0,1,1,1])
 @assert length(_IMPORTANT) == length(instances(Protein))
 is_important(x::Protein) = @inbounds _IMPORTANT[reinterpret(UInt8, x) + 0x01]
+
+function serialize_alnasms(
+    io::IO,
+    alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
+    passes::Vector{SegmentTuple{Bool}}
+)
+    pairs = map(zip(alnasms, passes)) do (alnasmtuple, passtuple)
+        @inbounds ntuple(N_SEGMENTS) do i
+            alnasmtuple[i], passtuple[i]
+        end
+    end
+    serialize(io, pairs)
+end
+
 
 include("alignedassembly.jl")
 include("depths.jl")
@@ -62,11 +77,12 @@ if abspath(PROGRAM_FILE) == @__FILE__
     alndir = joinpath(outdir, "tmp/aln")
     consdir = joinpath(outdir, "consensus")
     plotdir = joinpath(outdir, "depths")
+    tmpdir = joinpath(outdir, "tmp")
     
     if illumina
-        illumina_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir)
+        illumina_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
     else
-        nanopore_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir)
+        nanopore_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
     end
 end
 
