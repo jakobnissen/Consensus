@@ -3,7 +3,7 @@ import re
 
 def get_read_pairs(directory):
     if not os.path.isdir(directory):
-        raise FileNotFoundError(f"Could not locate read dirctory: {os.path.abspath(directory)}")
+        raise FileNotFoundError(f"Could not locate read directory: \"{os.path.abspath(directory)}\"")
 
     try:
         filenames = sorted(next(os.walk(directory))[2])
