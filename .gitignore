@@ -4,5 +4,6 @@
 build
 site
 /Manifest.toml
+InfluenzaReport.jl/Manifest.toml
 *.code-workspace
 __pycache__

@@ -104,8 +104,8 @@ function report(
     end
 
     IndelError = Union{Influenza.ErrorFrameShift, Influenza.ErrorIndelTooBig}
-    for protein in alnasm.proteins
 
+    for protein in alnasm.proteins
         # There can be a ton of indel errors. We're not interested in printing all of them,
         # so if there are a lot of indel errors, we just replace it with a ErrorTooManyIndels.
         if count(i -> i isa IndelError, protein.errors) > 3
@@ -118,7 +118,7 @@ function report(
         for error in protein.errors
             p = pass(error)
             println(buf, "\t\t", (p ? "      " : "ERROR "), protein.variant, ": ", error)
-            passed &= p
+            passed &= (p || !is_important(protein.variant))
         end
     end
     return (buf, passed)
@@ -129,16 +129,9 @@ function print_segment_header(buf::IOBuffer, alnasm::AlignedAssembly, depth::Dep
     println(buf, " depth $(@sprintf "%.2e" depth.mean_depth), coverage $(@sprintf "%.3f" depth.coverage)")
 end
 
-# fallback: segment errors fails, proteinerrors fail if protein is critical
+# fallback: segment errors fails
 pass(::Influenza.InfluenzaError) = false
-pass(::Influenza.ProteinError, protein::Protein) = !is_important(protein)
+pass(x::Influenza.ErrorEarlyStop) = x.expected_naa + 10 < x.observed_naa
 pass(x::Influenza.ErrorInsignificant) = x.n_insignificant < 5
 pass(x::Influenza.ErrorAmbiguous) = x.n_ambiguous < 5
-
-# Fail if 15 or more AAs missing
-function pass(x::Influenza.ErrorEarlyStop, protein::Protein)
-    !(is_important(protein) && x.expected_naa - x.observed_naa > 14)
-end
-
-# Not critical
-pass(x::Influenza.ErrorLateStop, protein::Protein) = true
+pass(x::Influenza.ErrorLateStop) = true

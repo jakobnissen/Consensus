@@ -1,6 +1,6 @@
 struct Depths
     # depths: Depth of the non-deleted bases.
-    # this is not measures like coverage. If a base is inserted, it counts towards
+    # this is not measured like coverage. If a base is inserted, it counts towards
     # depths, but not coverage.
     depths::Vector{UInt32}
     mean_depth::Float64
@@ -53,7 +53,7 @@ function parse_depths(path::String)::SegmentTuple{Option{Depths}}
         refdepthvec = UInt32[]
         for (refbase, rowdepths) in rows
             rowdepth = sum(rowdepths[1:4]) # only add A,C,G,T, skip N
-            if rowdepths[6] != maximum(rowdepths)
+            if rowdepths[6] != maximum(rowdepths) || iszero(maximum(rowdepths))
                 push!(depthvec, rowdepth)
             end
             if !isgap(refbase)
