@@ -76,7 +76,7 @@ end
 
 function add_alnasm_errors!(alnasm::AlignedAssembly)
     # Low identity to reference
-    alnasm.identity < 0.9 && push!(alnasm.errors, Influenza.ErrorLowIdentity(alnasm.identity))
+    alnasm.identity < 0.8 && push!(alnasm.errors, Influenza.ErrorLowIdentity(alnasm.identity))
     return nothing
 end
 
