@@ -282,6 +282,7 @@ if IS_ILLUMINA:
         output:
             res="tmp/aln/{basename}/kma2.res",
             fsa="tmp/aln/{basename}/kma2.fsa",
+            mat="tmp/aln/{basename}/kma2.mat.gz",
         params:
             db="tmp/aln/{basename}/cat.trimmed",
             outbase="tmp/aln/{basename}/kma2",
@@ -289,7 +290,7 @@ if IS_ILLUMINA:
         threads: 2
         run:
             shell("kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -gapopen -5 -nf 2> {log}")
+            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}")
 
     rule create_report:
         input:
@@ -301,7 +302,6 @@ if IS_ILLUMINA:
                 basename=BASENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
             ),
             report="report.txt",
-            depths=expand("depths/{basename}.pdf", basename=BASENAMES)
         params:
             juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",

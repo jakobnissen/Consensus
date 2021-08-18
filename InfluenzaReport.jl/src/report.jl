@@ -14,8 +14,10 @@ function illumina_snakemake_entrypoint(
     kma2_paths = [joinpath(aln_dir, basename, "kma2.res") for basename in basenames]
     kma2_identity_check(aln_asms, kma2_paths)
 
-    depthpaths = [joinpath(aln_dir, basename, "kma1.mat.gz") for basename in basenames]
-    depths = load_depths(aln_asms, depthpaths)
+    depthpaths = map(basenames) do basename
+        (template=joinpath(aln_dir, basename, "kma1.mat.gz"), assembly=joinpath(aln_dir, basename, "kma2.mat.gz"))
+    end
+    depths = load_depths_and_errors(aln_asms, depthpaths)
     plot_depths(depths_plot_dir, basenames, depths)
 
     passes = report(report_path, basenames, aln_asms, depths)
@@ -36,7 +38,7 @@ function nanopore_snakemake_entrypoint(
     aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.jls"), false)
 
     depthpaths = [joinpath(aln_dir, basename, "kma1.mat.gz") for basename in basenames]
-    depths = load_depths(aln_asms, depthpaths)
+    depths = load_depths_and_errors(aln_asms, depthpaths)
     plot_depths(depths_plot_dir, basenames, depths)
 
     passes = report(report_path, basenames, aln_asms, depths)
@@ -126,7 +128,7 @@ end
 
 function print_segment_header(buf::IOBuffer, alnasm::AlignedAssembly, depth::Depths)
     print(buf, " identity $(@sprintf "%.3f" (alnasm.identity)),")
-    println(buf, " depth $(@sprintf "%.2e" depth.mean_depth), coverage $(@sprintf "%.3f" depth.coverage)")
+    println(buf, " depth $(@sprintf "%.2e" mean_depth(depth)), coverage $(@sprintf "%.3f" coverage(depth))")
 end
 
 # fallback: segment errors fails
@@ -135,3 +137,8 @@ pass(x::Influenza.ErrorEarlyStop) = x.expected_naa + 10 < x.observed_naa
 pass(x::Influenza.ErrorInsignificant) = x.n_insignificant < 5
 pass(x::Influenza.ErrorAmbiguous) = x.n_ambiguous < 5
 pass(x::Influenza.ErrorLateStop) = true
+
+# Currently, we can't correctly estimate depths of Nanopore reads (see depths.jl file).
+# hence, to avoid getting too many false failures, we allow this error to pass through.
+# Too low depth will almost certainly be reflected in other errors anyway
+pass(x::Influenza.ErrorLowDepthBases) = true
