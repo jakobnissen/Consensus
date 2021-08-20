@@ -127,7 +127,7 @@ function report(
 end
 
 function print_segment_header(buf::IOBuffer, alnasm::AlignedAssembly, depth::Depths)
-    print(buf, " identity $(@sprintf "%.3f" (alnasm.identity)),")
+    print(buf, " Identity $(@sprintf "%.3f" (alnasm.identity)),")
     println(buf, " depth $(@sprintf "%.2e" mean_depth(depth)), coverage $(@sprintf "%.3f" coverage(depth))")
 end
 

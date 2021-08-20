@@ -119,8 +119,14 @@ function kma2_identity_check(
             end
             seen[index] = true
             alnasm = @unwrap_or m_alnasm[index] continue
-            if row.tid < 0.995
-                push!(alnasm.errors, Influenza.ErrorAssemblyNotConverged(row.tid))
+
+            # Identity can be low either due to low template id or low query id
+            # these may differ due to indels. We take the minimum of these.
+            # Strictly speaking, this means an N nt insersion in template plus an
+            # N nt deletion would only count as N differences, but it's OK here.
+            id = min(row.tid, row.qid)
+            if id < 0.995
+                push!(alnasm.errors, Influenza.ErrorAssemblyNotConverged(id))
             end
         end
     end
