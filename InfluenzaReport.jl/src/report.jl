@@ -133,7 +133,7 @@ end
 
 # fallback: segment errors fails
 pass(::Influenza.InfluenzaError) = false
-pass(x::Influenza.ErrorEarlyStop) = x.expected_naa + 10 < x.observed_naa
+pass(x::Influenza.ErrorEarlyStop) = x.observed_naa + 14 > x.expected_naa
 pass(x::Influenza.ErrorInsignificant) = x.n_insignificant < 5
 pass(x::Influenza.ErrorAmbiguous) = x.n_ambiguous < 5
 pass(x::Influenza.ErrorLateStop) = true
