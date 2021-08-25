@@ -18,7 +18,7 @@ and ultimately, query coverage will dominate the consensus anyway. Furthermore, 
 levels of contamination will throw off template coverage, but not query coverage."
 function readspa(path::AbstractString)::SegmentTuple{Option{UInt}}
     # criteria by which one row is better than another
-    isbetter(a, b) = min(a.tcov, b.tcov) > 0.3 ? (a.qcov > b.qcov) : (a.tcov > b.tcov)
+    isbetter(a, b) = min(a.tcov, b.tcov) > 0.7 ? (a.qcov > b.qcov) : (a.tcov > b.tcov)
 
     rows = open(io -> KMATools.parse_spa(io, path), path)
     bysegment = Dict{Segment, Vector{eltype(rows)}}()
