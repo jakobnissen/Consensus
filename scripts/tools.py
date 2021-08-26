@@ -12,19 +12,28 @@ def get_read_pairs(directory):
                                 "Are you sure you got the directory correct? "
                                 f"{os.path.abspath(directory)}")
 
-    pattern = re.compile(r"(.+)_R([12])(_\d+)?\.fastq\.gz")
+    # See Illumina's "Naming convention" documentation.
+    # Currently, this logic does not take multiple lanes into account: We assume
+    # only lane 1 is used.
+    PATTERN = r"([^_]+)_S(\d+)_L001_R([12])_001\.fastq\.gz"
+    pattern = re.compile(PATTERN)
 
     reads = dict()
     for filename in filenames:
         match = pattern.match(filename)
         if match is None:
-            raise ValueError("Filename {} does not match pattern ".format(filename) + r"\"(.+)_R([12])(_\d+)?\.fastq\.gz\"")
+            raise ValueError("Filename {} does not match pattern ".format(filename) + PATTERN)
 
-        basename, _, _ = match.groups()
+        samplename, samplenumber, readnumber = match.groups()
 
-        if basename not in reads:
-            reads[basename] = []
-        reads[basename].append(os.path.join(directory, filename))
+        # Samplenumber 0 are the undetermined reads, always. These cannot meaningfully
+        # be worked with.
+        if samplenumber == 0:
+            continue
+
+        if samplename not in reads:
+            reads[samplename] = []
+        reads[samplename].append(os.path.join(directory, filename))
 
     singletons = [v for v in reads.values() if len(v) != 2]
     if len(singletons) > 0:

@@ -145,17 +145,17 @@ end
 
 function plot_depths(
     dir::AbstractString,
-    basenames::Vector{String},
+    samplenames::Vector{String},
     depthsvec::Vector{SegmentTuple{Option{Depths}}}
 )
     isdir(dir) || mkdir(dir)
-    @assert length(basenames) == length(depthsvec)
-    for (basename, m_depths_tuple) in zip(basenames, depthsvec)
+    @assert length(samplenames) == length(depthsvec)
+    for (samplename, m_depths_tuple) in zip(samplenames, depthsvec)
         savefig(
             make_depth_plot(map(m_depths_tuple) do m_depths
                 and_then(i -> i.template_depths, Vector{UInt32}, m_depths)
             end),
-            joinpath(dir, basename * "_template.pdf")
+            joinpath(dir, samplename * "_template.pdf")
         )
         if any(m_depths_tuple) do m_depths
             map_or(d -> d.dedicated_assembly, m_depths, false)
@@ -164,7 +164,7 @@ function plot_depths(
                 make_depth_plot(map(m_depths_tuple) do m_depths
                     and_then(i -> i.assembly_depths, Vector{UInt32}, m_depths)
                 end),
-                joinpath(dir, basename * "_assembly.pdf")
+                joinpath(dir, samplename * "_assembly.pdf")
             )
         end
     end

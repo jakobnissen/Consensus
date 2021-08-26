@@ -1,5 +1,5 @@
 # In this script, it gathers all SPA hits, then creates new indexable
-# FASTA files for each basename based on what segments is SPA aligns to
+# FASTA files for each samplename based on what segments is SPA aligns to
 
 using InfluenzaCore
 using ErrorTypes
@@ -51,7 +51,7 @@ function collect_sequences(
     # First get a set of present nums
     records = Dict{UInt, FASTA.Record}()
     present = Set{UInt}()
-    for (basename, stuple) in numbers, (i, mnum) in enumerate(stuple)
+    for (samplename, stuple) in numbers, (i, mnum) in enumerate(stuple)
         num = @unwrap_or mnum continue
         push!(present, num)
     end
@@ -82,8 +82,8 @@ function dump_sequences(
     numbers::Vector{Tuple{String, SegmentTuple{Option{UInt}}}},
     records::Dict{UInt, FASTA.Record}
 )
-    for (basename, stuple) in numbers
-        writer = open(FASTA.Writer, joinpath(alndir, basename, "cat.fna"))
+    for (samplename, stuple) in numbers
+        writer = open(FASTA.Writer, joinpath(alndir, samplename, "cat.fna"))
         for (i, mnum) in enumerate(stuple)
             num = @unwrap_or mnum continue
             record = records[num]
@@ -96,8 +96,8 @@ function dump_sequences(
 end
 
 function main(alndir::AbstractString, refdir::AbstractString)
-    numbers = readdir(alndir) |> imap() do basename
-        (basename, readspa(joinpath(alndir, basename, "sparse.spa")))
+    numbers = readdir(alndir) |> imap() do samplename
+        (samplename, readspa(joinpath(alndir, samplename, "sparse.spa")))
     end |> collect
     records = collect_sequences(refdir, numbers)
     dump_sequences(alndir, numbers, records)

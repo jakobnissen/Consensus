@@ -6,22 +6,22 @@ function illumina_snakemake_entrypoint(
     depths_plot_dir::AbstractString,
     tmp_dir::AbstractString
 )::Nothing
-    basenames = sort!(readdir(aln_dir))
+    samplenames = sort!(readdir(aln_dir))
 
-    asm_paths = [joinpath(aln_dir, basename, "kma2.fsa") for basename in basenames]
+    asm_paths = [joinpath(aln_dir, samplename, "kma2.fsa") for samplename in samplenames]
     aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.jls"), true)
 
-    kma2_paths = [joinpath(aln_dir, basename, "kma2.res") for basename in basenames]
+    kma2_paths = [joinpath(aln_dir, samplename, "kma2.res") for samplename in samplenames]
     kma2_identity_check(aln_asms, kma2_paths)
 
-    depthpaths = map(basenames) do basename
-        (template=joinpath(aln_dir, basename, "kma1.mat.gz"), assembly=joinpath(aln_dir, basename, "kma2.mat.gz"))
+    depthpaths = map(samplenames) do samplename
+        (template=joinpath(aln_dir, samplename, "kma1.mat.gz"), assembly=joinpath(aln_dir, samplename, "kma2.mat.gz"))
     end
     depths = load_depths_and_errors(aln_asms, depthpaths)
-    plot_depths(depths_plot_dir, basenames, depths)
+    plot_depths(depths_plot_dir, samplenames, depths)
 
-    passes = report(report_path, basenames, aln_asms, depths)
-    write_files(cons_dir, tmp_dir, basenames, aln_asms, passes)
+    passes = report(report_path, samplenames, aln_asms, depths)
+    write_files(cons_dir, tmp_dir, samplenames, aln_asms, passes)
 end
 
 function nanopore_snakemake_entrypoint(
@@ -32,17 +32,17 @@ function nanopore_snakemake_entrypoint(
     depths_plot_dir::AbstractString,
     tmp_dir::AbstractString
 )::Nothing
-    basenames = sort!(readdir(aln_dir))
+    samplenames = sort!(readdir(aln_dir))
 
-    asm_paths = [joinpath(aln_dir, basename, "medaka", "consensus.fasta") for basename in basenames]
+    asm_paths = [joinpath(aln_dir, samplename, "medaka", "consensus.fasta") for samplename in samplenames]
     aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.jls"), false)
 
-    depthpaths = [joinpath(aln_dir, basename, "kma1.mat.gz") for basename in basenames]
+    depthpaths = [joinpath(aln_dir, samplename, "kma1.mat.gz") for samplename in samplenames]
     depths = load_depths_and_errors(aln_asms, depthpaths)
-    plot_depths(depths_plot_dir, basenames, depths)
+    plot_depths(depths_plot_dir, samplenames, depths)
 
-    passes = report(report_path, basenames, aln_asms, depths)
-    write_files(cons_dir, tmp_dir, basenames, aln_asms, passes)
+    passes = report(report_path, samplenames, aln_asms, depths)
+    write_files(cons_dir, tmp_dir, samplenames, aln_asms, passes)
 end
 
 # This function has a bit weird logical flow, because it's easiest to print
@@ -51,14 +51,14 @@ end
 # So what we do is to print to an IOBuffer, then prefix any segment with FAIL.
 function report(
     report_path::AbstractString,
-    basenames::Vector{<:AbstractString},
+    samplenames::Vector{<:AbstractString},
     alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
     depths::Vector{SegmentTuple{Option{Depths}}},
 )::Vector{SegmentTuple{Bool}}
     result = SegmentTuple{Bool}[]
     open(report_path, "w") do io
-        for (basename, alnasm, depth) in zip(basenames, alnasms, depths)
-            push!(result, report(io, basename, alnasm, depth))
+        for (samplename, alnasm, depth) in zip(samplenames, alnasms, depths)
+            push!(result, report(io, samplename, alnasm, depth))
         end
         print(io, '\n')
     end
@@ -67,12 +67,12 @@ end
 
 function report(
     io::IO,
-    basename::AbstractString,
+    samplename::AbstractString,
     alnasms::SegmentTuple{Option{AlignedAssembly}},
     depths::SegmentTuple{Option{Depths}}
 )::SegmentTuple{Bool}
     passes = Bool[]
-    println(io, basename)
+    println(io, samplename)
     for (i, (alnasm, depth)) in enumerate(zip(alnasms, depths))
         segment = Segment(i - 1)
         (buf, pass) = report(alnasm, depth)

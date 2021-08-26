@@ -50,7 +50,7 @@ if IS_ILLUMINA:
 else:
     READS = tools.get_nanopore_reads(READDIR)
 
-BASENAMES = sorted(READS.keys())
+SAMPLENAMES = sorted(READS.keys())
 
 REFOUTDIR = os.path.join(REFDIR, "refout")
 
@@ -69,8 +69,8 @@ def done_input(wildcards):
     # Add report and the commit
     inputs = ["report.txt"]
 
-    for basename in BASENAMES:
-        inputs.append(f"consensus/{basename}/consensus.fna")
+    for samplename in SAMPLENAMES:
+        inputs.append(f"consensus/{samplename}/consensus.fna")
 
     return inputs
 
@@ -109,14 +109,14 @@ if IS_ILLUMINA:
 
     rule fastp:
         input:
-            fw=lambda wildcards: READS[wildcards.basename][0],
-            rv=lambda wildcards: READS[wildcards.basename][1],
+            fw=lambda wildcards: READS[wildcards.samplename][0],
+            rv=lambda wildcards: READS[wildcards.samplename][1],
         output:
-            fw=temp('tmp/trim/{basename}/fw.fq'),
-            rv=temp('tmp/trim/{basename}/rv.fq'),
-            html='tmp/trim/{basename}/report.html',
-            json='tmp/trim/{basename}/report.json'
-        log: "tmp/log/fastp/{basename}.log"
+            fw=temp('tmp/trim/{samplename}/fw.fq'),
+            rv=temp('tmp/trim/{samplename}/rv.fq'),
+            html='tmp/trim/{samplename}/report.html',
+            json='tmp/trim/{samplename}/report.json'
+        log: "tmp/log/fastp/{samplename}.log"
         threads: 2
         shell:
             'fastp -i {input.fw} -I {input.rv} '
@@ -129,12 +129,12 @@ if IS_ILLUMINA:
             fw=rules.fastp.output.fw,
             rv=rules.fastp.output.rv,
             index=rules.index_ref.output
-        output: "tmp/aln/{basename}/sparse.spa"
+        output: "tmp/aln/{samplename}/sparse.spa"
         params:
             db=REFOUTDIR + "/refs",
-            outbase="tmp/aln/{basename}/sparse"
+            outbase="tmp/aln/{samplename}/sparse"
         threads: 2
-        log: "tmp/log/aln/{basename}.initial.log"
+        log: "tmp/log/aln/{samplename}.initial.log"
         shell:
             # Here, not sure if I should sort by template cov (-ss c) or not.
             # Pro: We mostly care about having a fully-covered template, not a partially
@@ -146,12 +146,12 @@ if IS_ILLUMINA:
 
 elif IS_NANOPORE:
     rule fastp:
-        input: lambda wildcards: READS[wildcards.basename]
+        input: lambda wildcards: READS[wildcards.samplename]
         output:
-            reads=temp('tmp/trim/{basename}/reads.fq'),
-            html='tmp/trim/{basename}/report.html',
-            json='tmp/trim/{basename}/report.json'
-        log: "tmp/log/fastp/{basename}.log"
+            reads=temp('tmp/trim/{samplename}/reads.fq'),
+            html='tmp/trim/{samplename}/report.html',
+            json='tmp/trim/{samplename}/report.json'
+        log: "tmp/log/fastp/{samplename}.log"
         threads: 2
         shell:
             'fastp -i {input} -o {output.reads} --html {output.html} '
@@ -164,12 +164,12 @@ elif IS_NANOPORE:
         input:
             reads=rules.fastp.output.reads,
             index=rules.index_ref.output
-        output: "tmp/aln/{basename}/sparse.spa"
+        output: "tmp/aln/{samplename}/sparse.spa"
         params:
             db=REFOUTDIR + "/refs", # same as index_reffile param
-            outbase="tmp/aln/{basename}/sparse"
+            outbase="tmp/aln/{samplename}/sparse"
         threads: 1
-        log: "tmp/log/aln/{basename}.initial.log"
+        log: "tmp/log/aln/{samplename}.initial.log"
         shell:
             # See above comment in rule with same name
             "kma -i {input.reads} -o {params.outbase} -t_db {params.db} "
@@ -177,8 +177,8 @@ elif IS_NANOPORE:
 
 ### Both platforms
 rule collect_best_templates:
-    input: expand("tmp/aln/{basename}/sparse.spa", basename=BASENAMES)
-    output: expand("tmp/aln/{basename}/cat.fna", basename=BASENAMES)
+    input: expand("tmp/aln/{samplename}/sparse.spa", samplename=SAMPLENAMES)
+    output: expand("tmp/aln/{samplename}/cat.fna", samplename=SAMPLENAMES)
     params:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/gather_spa.jl",
@@ -186,15 +186,15 @@ rule collect_best_templates:
     shell: "{params.juliacmd} {params.scriptpath} tmp/aln {params.refpath}"
 
 rule first_kma_index:
-    input: "tmp/aln/{basename}/cat.fna"
+    input: "tmp/aln/{samplename}/cat.fna"
     output:
-        comp=temp("tmp/aln/{basename}/cat.comp.b"),
-        name=temp("tmp/aln/{basename}/cat.name"),
-        length=temp("tmp/aln/{basename}/cat.length.b"),
-        seq=temp("tmp/aln/{basename}/cat.seq.b")
+        comp=temp("tmp/aln/{samplename}/cat.comp.b"),
+        name=temp("tmp/aln/{samplename}/cat.name"),
+        length=temp("tmp/aln/{samplename}/cat.length.b"),
+        seq=temp("tmp/aln/{samplename}/cat.seq.b")
     params:
-        t_db="tmp/aln/{basename}/cat"
-    log: "tmp/log/aln/kma1_index_{basename}.log"
+        t_db="tmp/aln/{samplename}/cat"
+    log: "tmp/log/aln/kma1_index_{samplename}.log"
     # The pipeline is very sensitive to the value of k here.
     # Too low means the mapping is excruciatingly slow,
     # too high results in poor mapping quality.
@@ -208,13 +208,13 @@ if IS_ILLUMINA:
             rv=rules.fastp.output.rv,
             index=rules.first_kma_index.output,
         output:
-            res="tmp/aln/{basename}/kma1.res",
-            fsa="tmp/aln/{basename}/kma1.fsa",
-            mat="tmp/aln/{basename}/kma1.mat.gz",
+            res="tmp/aln/{samplename}/kma1.res",
+            fsa="tmp/aln/{samplename}/kma1.fsa",
+            mat="tmp/aln/{samplename}/kma1.mat.gz",
         params:
-            db="tmp/aln/{basename}/cat",
-            outbase="tmp/aln/{basename}/kma1",
-        log: "tmp/log/tmp/aln/kma1_map_{basename}.log"
+            db="tmp/aln/{samplename}/cat",
+            outbase="tmp/aln/{samplename}/kma1",
+        log: "tmp/log/tmp/aln/kma1_map_{samplename}.log"
         threads: 2
         run:
             shell("kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
@@ -226,13 +226,13 @@ elif IS_NANOPORE:
             reads=rules.fastp.output.reads,
             index=rules.first_kma_index.output,
         output:
-            res="tmp/aln/{basename}/kma1.res",
-            fsa="tmp/aln/{basename}/kma1.fsa",
-            mat="tmp/aln/{basename}/kma1.mat.gz",
+            res="tmp/aln/{samplename}/kma1.res",
+            fsa="tmp/aln/{samplename}/kma1.fsa",
+            mat="tmp/aln/{samplename}/kma1.mat.gz",
         params:
-            db="tmp/aln/{basename}/cat",
-            outbase="tmp/aln/{basename}/kma1",
-        log: "tmp/log/aln/kma1_map_{basename}.log"
+            db="tmp/aln/{samplename}/cat",
+            outbase="tmp/aln/{samplename}/kma1",
+        log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
         run:
             shell("kma -i {input.reads} -o {params.outbase} -t_db {params.db} "
@@ -243,8 +243,8 @@ rule remove_primers:
     input:
         con=rules.first_kma_map.output.fsa,
         primers=f"{REFDIR}/primers.fna"
-    output: temp("tmp/aln/{basename}/cat.trimmed.fna")
-    log: "tmp/log/consensus/remove_primers_{basename}.txt"
+    output: temp("tmp/aln/{samplename}/cat.trimmed.fna")
+    log: "tmp/log/consensus/remove_primers_{samplename}.txt"
     params:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/trim_consensus.jl",
@@ -264,13 +264,13 @@ if IS_ILLUMINA:
     rule second_kma_index:
         input: rules.remove_primers.output
         output:
-            comp=temp("tmp/aln/{basename}/cat.trimmed.comp.b"),
-            name=temp("tmp/aln/{basename}/cat.trimmed.name"),
-            length=temp("tmp/aln/{basename}/cat.trimmed.length.b"),
-            seq=temp("tmp/aln/{basename}/cat.trimmed.seq.b")
+            comp=temp("tmp/aln/{samplename}/cat.trimmed.comp.b"),
+            name=temp("tmp/aln/{samplename}/cat.trimmed.name"),
+            length=temp("tmp/aln/{samplename}/cat.trimmed.length.b"),
+            seq=temp("tmp/aln/{samplename}/cat.trimmed.seq.b")
         params:
-            t_db="tmp/aln/{basename}/cat.trimmed"
-        log: "tmp/log/aln/kma2_index_{basename}.log"
+            t_db="tmp/aln/{samplename}/cat.trimmed"
+        log: "tmp/log/aln/kma2_index_{samplename}.log"
         shell: "kma index -i {input} -o {params.t_db} 2> {log}"
 
     # And now we KMA map to that index again
@@ -280,13 +280,13 @@ if IS_ILLUMINA:
             rv=rules.fastp.output.rv,
             index=rules.second_kma_index.output,
         output:
-            res="tmp/aln/{basename}/kma2.res",
-            fsa="tmp/aln/{basename}/kma2.fsa",
-            mat="tmp/aln/{basename}/kma2.mat.gz",
+            res="tmp/aln/{samplename}/kma2.res",
+            fsa="tmp/aln/{samplename}/kma2.fsa",
+            mat="tmp/aln/{samplename}/kma2.mat.gz",
         params:
-            db="tmp/aln/{basename}/cat.trimmed",
-            outbase="tmp/aln/{basename}/kma2",
-        log: "tmp/log/aln/kma2_map_{basename}.log"
+            db="tmp/aln/{samplename}/cat.trimmed",
+            outbase="tmp/aln/{samplename}/kma2",
+        log: "tmp/log/aln/kma2_map_{samplename}.log"
         threads: 2
         run:
             shell("kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
@@ -294,12 +294,12 @@ if IS_ILLUMINA:
 
     rule create_report:
         input:
-            matrix=expand("tmp/aln/{basename}/kma1.mat.gz", basename=BASENAMES),
-            assembly=expand("tmp/aln/{basename}/kma2.fsa", basename=BASENAMES),
-            res=expand("tmp/aln/{basename}/kma2.res", basename=BASENAMES)
+            matrix=expand("tmp/aln/{samplename}/kma1.mat.gz", samplename=SAMPLENAMES),
+            assembly=expand("tmp/aln/{samplename}/kma2.fsa", samplename=SAMPLENAMES),
+            res=expand("tmp/aln/{samplename}/kma2.res", samplename=SAMPLENAMES)
         output:
-            consensus=expand("consensus/{basename}/{type}.{nuc}",
-                basename=BASENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
+            consensus=expand("consensus/{samplename}/{type}.{nuc}",
+                samplename=SAMPLENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
             ),
             report="report.txt",
         params:
@@ -316,8 +316,8 @@ elif IS_NANOPORE:
         input: 
             reads=rules.fastp.output.reads,
             draft=rules.remove_primers.output
-        output: directory("tmp/aln/{basename}/medaka")
-        log: "tmp/log/aln/medaka_{basename}.log"
+        output: directory("tmp/aln/{samplename}/medaka")
+        log: "tmp/log/aln/medaka_{samplename}.log"
         threads: 2
         params:
             model=lambda wc: "r941_min_high_g360" if PORE == 9 else "r103_min_high_g360"
@@ -327,15 +327,15 @@ elif IS_NANOPORE:
 
     rule clean_medaka:
         input: rules.medaka.output
-        output: "tmp/aln/{basename}/moved.txt"
+        output: "tmp/aln/{samplename}/moved.txt"
         shell: "rm {input}/*.bam {input}/*.bai {input}/*.hdf && touch {output}"
 
     rule create_report:
         input:
-            assembly=expand("tmp/aln/{basename}/moved.txt", basename=BASENAMES),
+            assembly=expand("tmp/aln/{samplename}/moved.txt", samplename=SAMPLENAMES),
         output:
-            consensus=expand("consensus/{basename}/{type}.{nuc}",
-                basename=BASENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
+            consensus=expand("consensus/{samplename}/{type}.{nuc}",
+                samplename=SAMPLENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
             ),
             report="report.txt",
         params:

@@ -135,25 +135,25 @@ end
 function write_files(
     cons_dirname::AbstractString,
     tmp_dirname::AbstractString,
-    basenames::Vector{String},
+    samplenames::Vector{String},
     alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
     passes::Vector{SegmentTuple{Bool}}
 )
     open(joinpath(tmp_dirname, "aln_asms.jl"), "w") do io
         serialize_alnasms(io, alnasms, passes)
     end
-    write_consensus(cons_dirname, basenames, alnasms, passes)
+    write_consensus(cons_dirname, samplenames, alnasms, passes)
 end
 
 function write_consensus(
     dirname::AbstractString,
-    basenames::Vector{String},
+    samplenames::Vector{String},
     alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
     passes::Vector{SegmentTuple{Bool}},
 )
     isdir(dirname) || mkdir(dirname)
-    for (basename, alnasm_tup, pass_tup) in zip(basenames, alnasms, passes)
-        subdir = joinpath(dirname, basename)
+    for (samplename, alnasm_tup, pass_tup) in zip(samplenames, alnasms, passes)
+        subdir = joinpath(dirname, samplename)
         isdir(subdir) || mkdir(subdir)
         
         cons_dna_writer = open(FASTA.Writer, joinpath(subdir, "consensus.fna"))
@@ -167,7 +167,7 @@ function write_consensus(
 
             # Write DNA
             asm = alnasm.assembly
-            dna_record = asm_dna_record(asm, basename * '_' * string(segment))
+            dna_record = asm_dna_record(asm, samplename * '_' * string(segment))
             write(cons_dna_writer, dna_record)
             is_passed && write(cura_dna_writer, dna_record)
 
@@ -177,7 +177,7 @@ function write_consensus(
                 orfs = @unwrap_or protein.orfs continue
                 aaseq = @unwrap_or m_aaseq continue
                 header = (
-                    basename * '_' * string(protein.variant) * '_' *
+                    samplename * '_' * string(protein.variant) * '_' *
                     join(["$(first(i))-$(last(i))" for i in orfs], ',')
                 )
                 record = FASTA.Record(header, aaseq)
