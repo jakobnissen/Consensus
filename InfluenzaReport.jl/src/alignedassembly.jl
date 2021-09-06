@@ -31,7 +31,11 @@ function load_assembly(path::AbstractString, kma::Bool)::SegmentTuple{Option{Ass
             end
         end
         accession = first(v)
-        segment = tryparse(Segment, v[2])::Segment
+        segment = let
+            s = tryparse(Segment, v[2])
+            s === nothing && error("In $path, found segment \"$(v[2])\", expected segment")
+            s::Segment
+        end
         segment_index = reinterpret(UInt8, segment) + 0x01
         is_error(result[segment_index]) || error("Segment $segment present twice in $path")
         result[segment_index] = some(Assembly(accession, asm.seq, some(segment), asm.insignificant))

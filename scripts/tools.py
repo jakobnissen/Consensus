@@ -15,7 +15,7 @@ def get_read_pairs(directory):
     # See Illumina's "Naming convention" documentation.
     # Currently, this logic does not take multiple lanes into account: We assume
     # only lane 1 is used.
-    PATTERN = r"([^_]+)_S(\d+)_L001_R([12])_001\.fastq\.gz"
+    PATTERN = r"(.+)_S(\d+)_L001_R([12])_001\.fastq\.gz"
     pattern = re.compile(PATTERN)
 
     reads = dict()

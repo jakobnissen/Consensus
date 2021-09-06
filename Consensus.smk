@@ -94,7 +94,7 @@ rule index_ref:
         outpath=REFOUTDIR + "/refs",
     log: "tmp/log/kma_ref.log"
     
-    shell: "kma index -k 12 -Sparse - -i {input} -o {params.outpath} 2> {log}"
+    shell: "kma index -nbp -k 12 -Sparse - -i {input} -o {params.outpath} 2> {log}"
 
 ############################
 # CONSENSUS PART OF PIPELINE
@@ -178,7 +178,7 @@ elif IS_NANOPORE:
 ### Both platforms
 rule collect_best_templates:
     input: expand("tmp/aln/{samplename}/sparse.spa", samplename=SAMPLENAMES)
-    output: expand("tmp/aln/{samplename}/cat.fna", samplename=SAMPLENAMES)
+    output: temp(expand("tmp/aln/{samplename}/cat.fna", samplename=SAMPLENAMES))
     params:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/gather_spa.jl",
@@ -199,7 +199,7 @@ rule first_kma_index:
     # Too low means the mapping is excruciatingly slow,
     # too high results in poor mapping quality.
     # k = 10 might be a little on the low side.
-    shell: "kma index -k 10 -i {input} -o {params.t_db} 2> {log}"
+    shell: "kma index -nbp -k 10 -i {input} -o {params.t_db} 2> {log}"
 
 if IS_ILLUMINA:
     rule first_kma_map:
@@ -214,7 +214,7 @@ if IS_ILLUMINA:
         params:
             db="tmp/aln/{samplename}/cat",
             outbase="tmp/aln/{samplename}/kma1",
-        log: "tmp/log/tmp/aln/kma1_map_{samplename}.log"
+        log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
         run:
             shell("kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
@@ -271,7 +271,7 @@ if IS_ILLUMINA:
         params:
             t_db="tmp/aln/{samplename}/cat.trimmed"
         log: "tmp/log/aln/kma2_index_{samplename}.log"
-        shell: "kma index -i {input} -o {params.t_db} 2> {log}"
+        shell: "kma index -nbp -i {input} -o {params.t_db} 2> {log}"
 
     # And now we KMA map to that index again
     rule second_kma_map:

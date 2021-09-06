@@ -12,13 +12,13 @@ ifilter(f) = x -> Iterators.filter(f, x)
 const N_SEGMENTS = length(instances(Segment))
 const SegmentTuple{T} = NTuple{N_SEGMENTS, T}
 
-"Get the highest query coverage if template coverage > 30%, else highest template coverage.
-The idea is that if template coverage is 30%, then it's good enough to build an assembly,
+"Get the highest query coverage if template coverage > 50%, else highest template coverage.
+The idea is that if template coverage is 50%, then it's good enough to build an assembly,
 and ultimately, query coverage will dominate the consensus anyway. Furthermore, small
 levels of contamination will throw off template coverage, but not query coverage."
 function readspa(path::AbstractString)::SegmentTuple{Option{UInt}}
     # criteria by which one row is better than another
-    isbetter(a, b) = min(a.tcov, b.tcov) > 0.7 ? (a.qcov > b.qcov) : (a.tcov > b.tcov)
+    isbetter(a, b) = min(a.tcov, b.tcov) > 0.5 ? (a.qcov > b.qcov) : (a.tcov > b.tcov)
 
     rows = open(io -> KMATools.parse_spa(io, path), path)
     bysegment = Dict{Segment, Vector{eltype(rows)}}()
