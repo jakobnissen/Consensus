@@ -1,10 +1,10 @@
 function load_aligned_assemblies(
     asm_paths::Vector{String},
-    jlspath::AbstractString,
+    jsonpath::AbstractString,
     is_kma::Bool,
 )::Vector{SegmentTuple{Option{AlignedAssembly}}}
     asms = map(path -> load_assembly(path, is_kma), asm_paths)
-    refs = find_references(asms, jlspath)
+    refs = find_references(asms, jsonpath)
 
     zip(asms, refs) |> Map() do (asm, ref)
         ntuple = SegmentTuple(zip(asm, ref))
@@ -45,7 +45,7 @@ end
 
 function find_references(
     asms::Vector{SegmentTuple{Option{Assembly}}},
-    jlspath::AbstractString
+    jsonpath::AbstractString
 )::Vector{SegmentTuple{Option{Reference}}}
 
     accessions = Set{String}()
@@ -56,7 +56,7 @@ function find_references(
 
     byaccession = Dict{String, Reference}()
     added_accessions = Set{String}()
-    for reference in Influenza.load_references(jlspath)
+    for reference in Influenza.load_references(jsonpath)
         if reference.name in accessions
             push!(added_accessions, reference.name)
             byaccession[reference.name] = reference
@@ -64,7 +64,7 @@ function find_references(
     end
     missing_acc = setdiff(accessions, added_accessions)
     if !isempty(missing_acc)
-        error("Accession $(first(missing_acc)) missing from $jlspath")
+        error("Accession $(first(missing_acc)) missing from $jsonpath")
     end
 
     return map(asms) do asmt

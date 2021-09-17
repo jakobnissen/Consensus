@@ -1,6 +1,6 @@
 function illumina_snakemake_entrypoint(
     report_path::AbstractString, # output report
-    ref_dir::AbstractString, # dir of .fna + .jls ref files
+    ref_dir::AbstractString, # dir of .fna + .json ref files
     aln_dir::AbstractString, # dir of medaka / kma aln
     cons_dir::AbstractString,
     depths_plot_dir::AbstractString,
@@ -9,7 +9,7 @@ function illumina_snakemake_entrypoint(
     samplenames = sort!(readdir(aln_dir))
 
     asm_paths = [joinpath(aln_dir, samplename, "kma2.fsa") for samplename in samplenames]
-    aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.jls"), true)
+    aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.json"), true)
 
     kma2_paths = [joinpath(aln_dir, samplename, "kma2.res") for samplename in samplenames]
     kma2_identity_check(aln_asms, kma2_paths)
@@ -26,7 +26,7 @@ end
 
 function nanopore_snakemake_entrypoint(
     report_path::AbstractString, # output report
-    ref_dir::AbstractString, # dir of .fna + .jls ref files
+    ref_dir::AbstractString, # dir of .fna + .json ref files
     aln_dir::AbstractString, # dir of medaka / kma aln
     cons_dir::AbstractString,
     depths_plot_dir::AbstractString,
@@ -35,7 +35,7 @@ function nanopore_snakemake_entrypoint(
     samplenames = sort!(readdir(aln_dir))
 
     asm_paths = [joinpath(aln_dir, samplename, "medaka", "consensus.fasta") for samplename in samplenames]
-    aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.jls"), false)
+    aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.json"), false)
 
     depthpaths = [joinpath(aln_dir, samplename, "kma1.mat.gz") for samplename in samplenames]
     depths = load_depths_and_errors(aln_asms, depthpaths)

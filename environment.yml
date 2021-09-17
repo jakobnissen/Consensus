@@ -3,9 +3,6 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - mafft=7.486
-  - trimal=1.4.1
-  - iqtree=2.1.2
   - fastp=0.20.1
   - medaka=1.0.3
   - kma=1.3.23

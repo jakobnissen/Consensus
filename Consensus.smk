@@ -10,14 +10,17 @@ JULIA_COMMAND = f"julia --startup-file=no --project={SNAKEDIR}"
 ######################################################
 # GLOBAL CONSTANTS
 ######################################################
+def abspath(x):
+    return os.path.abspath(os.path.expanduser(x))
+
 if "readdir" not in config:
     raise KeyError("You must supply read path: '--config readdir=path/to/reads'")
 
-READDIR = config["readdir"]
+READDIR = abspath(config["readdir"])
 
 # For some reason it all fucks up if the read directory is a child of the running
 # directory, so we check that here.
-_dir = os.path.abspath(READDIR)
+_dir = READDIR
 while _dir != os.path.dirname(_dir):
     if _dir == os.getcwd():
         raise ValueError("Error: Read path cannot be child directory of running directory")
@@ -41,7 +44,7 @@ if IS_NANOPORE:
 if "ref" not in config:
     raise KeyError("You must supply reference directory: '--config ref=/path/to/ref'")
 
-REFDIR = config["ref"]
+REFDIR = abspath(config["ref"])
 if not os.path.isdir(REFDIR):
     raise NotADirectoryError(REFDIR)
 
@@ -198,7 +201,6 @@ rule first_kma_index:
     # The pipeline is very sensitive to the value of k here.
     # Too low means the mapping is excruciatingly slow,
     # too high results in poor mapping quality.
-    # k = 10 might be a little on the low side.
     shell: "kma index -nbp -k 10 -i {input} -o {params.t_db} 2> {log}"
 
 if IS_ILLUMINA:

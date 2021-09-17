@@ -177,7 +177,7 @@ function make_depth_plot(depths::SegmentTuple{Option{Vector{UInt32}}})
         segment = Segment(index - 1)
         ys = log10.(depth)
         xs = range(0.0, stop=1.0, length=length(ys))
-        plot!(plt, xs, ys, label=string(segment), legend=:outertopright)
+        plot!(plt, xs, ys, label=string(segment), legend=:outertopright, color=index)
     end
     return plt
 end
