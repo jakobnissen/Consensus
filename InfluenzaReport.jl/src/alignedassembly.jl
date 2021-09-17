@@ -21,26 +21,47 @@ function load_assembly(path::AbstractString, kma::Bool)::SegmentTuple{Option{Ass
     records = open(collect, FASTA.Reader, path)
     result = fill(none(Assembly), N_SEGMENTS)
     for record in records
-        asm = Assembly(record, nothing, kma)
-        v = rsplit(asm.name, '_', limit=2 + !kma)
-        if kma
-            length(v) == 2 || error("In $path, found header \"$(asm.name)\", expected pattern \"HEADER_SEGMENT\"")
-        else
-            if !(length(v) == 3 && last(v) == "segment0")
-                error("In $path, found header \"$(asm.name)\", expected pattern \"HEADER_SEGMENT_segment0\"")
+        temp_asm = Assembly(record, nothing)
+        (accession, segment) = let
+            if kma
+                # Format should be HEADER_SEGMENT
+                s = try_split_segment(temp_asm.name)
+                if s === nothing
+                    error("In $path, found header \"$(temp_asm.name)\", expected pattern \"HEADER_SEGMENT\"")
+                else
+                    s
+                end
+            else
+                s = try_parse_medaka_header(temp_asm.name)
+                if s === nothing
+                    error("In $path, found header \"$(temp_asm.name)\", expected pattern \"HEADER_SEGMENT_segment0 HEADER_SEGMENT[stuff]\"")
+                else
+                    s
+                end
             end
-        end
-        accession = first(v)
-        segment = let
-            s = tryparse(Segment, v[2])
-            s === nothing && error("In $path, found segment \"$(v[2])\", expected segment")
-            s::Segment
         end
         segment_index = reinterpret(UInt8, segment) + 0x01
         is_error(result[segment_index]) || error("Segment $segment present twice in $path")
-        result[segment_index] = some(Assembly(accession, asm.seq, some(segment), asm.insignificant))
+        result[segment_index] = some(Assembly(accession, temp_asm.seq, some(segment), temp_asm.insignificant))
     end
     return SegmentTuple(result)
+end
+
+function try_parse_medaka_header(s::Union{String, SubString{String}})
+    ps = findall("_segment0", s)
+    # if _segment0 is contained in the header N times, it will appear 2N+1 times total.
+    isodd(length(isempty(ps))) || return nothing
+    underscore_pos = first(ps[cld(length(ps), 2)])
+    stripped_header = SubString(s, 1:prevind(s, underscore_pos))
+    return try_split_segment(stripped_header)
+end
+
+function try_split_segment(s::Union{String, SubString{String}})
+    p = findlast(isequal(UInt8('_')), codeunits(s))
+    p === nothing && return nothing
+    seg = tryparse(Segment, SubString(s, p+1:lastindex(s)))
+    seg === nothing && return nothing
+    return (SubString(s, 1, prevind(s, p)), seg)
 end
 
 function find_references(

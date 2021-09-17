@@ -342,7 +342,7 @@ elif IS_NANOPORE:
         params:
             juliacmd=f"JULIA_LOAD_PATH={os.path.join(SNAKEDIR, 'InfluenzaReport.jl')} julia --startup-file=no",
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
-            refdir=REFSEQDIR
+            refdir=REFDIR
         log: "tmp/log/report.txt"
         threads: workflow.cores
         shell: "{params.juliacmd} -t {threads} {params.scriptpath} nanopore . {params.refdir} > {log}"
