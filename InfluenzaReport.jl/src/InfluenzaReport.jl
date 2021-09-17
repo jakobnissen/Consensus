@@ -53,6 +53,22 @@ function serialize_alnasms(
     serialize(io, pairs)
 end
 
+function try_split_segment(s::Union{String, SubString{String}})
+    p = findlast(isequal(UInt8('_')), codeunits(s))
+    p === nothing && return nothing
+    seg = tryparse(Segment, SubString(s, p+1:lastindex(s)))
+    seg === nothing && return nothing
+    return (SubString(s, 1, prevind(s, p)), seg)
+end
+
+function split_segment(source::AbstractString, s::Union{String, SubString{String}})
+    pair = try_split_segment(s)
+    if pair === nothing
+        error("In \"" * source * "\", expected NAME_SEGMENT, got \"", s, '\"')
+    else
+        pair
+    end
+end
 
 include("alignedassembly.jl")
 include("depths.jl")

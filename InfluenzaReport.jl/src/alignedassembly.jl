@@ -24,13 +24,7 @@ function load_assembly(path::AbstractString, kma::Bool)::SegmentTuple{Option{Ass
         temp_asm = Assembly(record, nothing)
         (accession, segment) = let
             if kma
-                # Format should be HEADER_SEGMENT
-                s = try_split_segment(temp_asm.name)
-                if s === nothing
-                    error("In $path, found header \"$(temp_asm.name)\", expected pattern \"HEADER_SEGMENT\"")
-                else
-                    s
-                end
+                split_segment(path, temp_asm.name)
             else
                 s = try_parse_medaka_header(temp_asm.name)
                 if s === nothing
@@ -54,14 +48,6 @@ function try_parse_medaka_header(s::Union{String, SubString{String}})
     underscore_pos = first(ps[cld(length(ps), 2)])
     stripped_header = SubString(s, 1:prevind(s, underscore_pos))
     return try_split_segment(stripped_header)
-end
-
-function try_split_segment(s::Union{String, SubString{String}})
-    p = findlast(isequal(UInt8('_')), codeunits(s))
-    p === nothing && return nothing
-    seg = tryparse(Segment, SubString(s, p+1:lastindex(s)))
-    seg === nothing && return nothing
-    return (SubString(s, 1, prevind(s, p)), seg)
 end
 
 function find_references(
@@ -133,11 +119,7 @@ function kma2_identity_check(
             KMATools.parse_res(io, respath)
         end
         for row in res
-            segment::Segment = let
-                p = findlast('_', row.template)
-                s = p === nothing ? nothing : tryparse(Segment, strip(row.template[p+1:end]))
-                s !== nothing ? s : error("Could not parse segment in file $respath, line $(row.template)")
-            end
+            _, segment = split_segment(respath, strip(row.template))
             index = UInt8(segment) + 0x01
             if seen[index]
                 error("Duplicate segment $segment in file $respath")

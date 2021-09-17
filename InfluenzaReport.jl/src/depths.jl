@@ -108,11 +108,7 @@ function split_mat_segments(
 )::SegmentTuple{Option{Vector{KMARowType}}}
     result = fill(none(Vector{KMARowType}), N_SEGMENTS)
     for (header, rows) in matdata
-        segment::Segment = let
-            p = findlast('_', header)
-            s = p === nothing ? nothing : tryparse(Segment, strip(header[p+1:end]))
-            s !== nothing ? s : error("Could not parse segment from file $path, header $(header)")
-        end
+        _, segment = split_segment(path, strip(header))
         index = Integer(segment) + 0x01
         is_error(result[index]) || error("Segment $segment present twice in $path")
         result[index] = some(rows)
