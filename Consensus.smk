@@ -5,7 +5,7 @@ SNAKEDIR = os.path.dirname(workflow.snakefile)
 sys.path.append(os.path.join(SNAKEDIR, "scripts"))
 import tools
 
-JULIA_COMMAND = f"julia --startup-file=no --project={SNAKEDIR}"
+JULIA_COMMAND = f"JULIA_LOAD_PATH={SNAKEDIR} julia --startup-file=no"
 
 ######################################################
 # GLOBAL CONSTANTS
@@ -218,9 +218,9 @@ if IS_ILLUMINA:
             outbase="tmp/aln/{samplename}/kma1",
         log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
-        run:
-            shell("kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}")
+        shell:
+            "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
+            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}"
 
 elif IS_NANOPORE:
     rule first_kma_map:
@@ -236,9 +236,9 @@ elif IS_NANOPORE:
             outbase="tmp/aln/{samplename}/kma1",
         log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
-        run:
-            shell("kma -i {input.reads} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -bcNano -nf -matrix 2> {log}")
+        shell:
+            "kma -i {input.reads} -o {params.outbase} -t_db {params.db} "
+            "-t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
 
 # Both platforms
 rule remove_primers:
@@ -290,9 +290,9 @@ if IS_ILLUMINA:
             outbase="tmp/aln/{samplename}/kma2",
         log: "tmp/log/aln/kma2_map_{samplename}.log"
         threads: 2
-        run:
-            shell("kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}")
+        shell: 
+            "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
+            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}"
 
     rule create_report:
         input:
@@ -305,13 +305,12 @@ if IS_ILLUMINA:
             ),
             report="report.txt",
         params:
-            juliacmd=JULIA_COMMAND,
+            juliacmd=f"JULIA_LOAD_PATH={os.path.join(SNAKEDIR, 'InfluenzaReport.jl')} julia --startup-file=no",
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
             refdir=REFDIR
         log: "tmp/log/report.txt"
         threads: workflow.cores
-        run:
-            shell(f"{params.juliacmd} -t {threads} {params.scriptpath} illumina . {params.refdir} > {log}")
+        shell: "{params.juliacmd} -t {threads} {params.scriptpath} illumina . {params.refdir} > {log}"
 
 elif IS_NANOPORE:
     rule medaka:
@@ -341,10 +340,9 @@ elif IS_NANOPORE:
             ),
             report="report.txt",
         params:
-            juliacmd=JULIA_COMMAND,
+            juliacmd=f"JULIA_LOAD_PATH={os.path.join(SNAKEDIR, 'InfluenzaReport.jl')} julia --startup-file=no",
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
             refdir=REFSEQDIR
         log: "tmp/log/report.txt"
         threads: workflow.cores
-        run:
-            shell(f"{params.juliacmd} -t {threads} {params.scriptpath} nanopore . {params.refdir} > {log}")
+        shell: "{params.juliacmd} -t {threads} {params.scriptpath} nanopore . {params.refdir} > {log}"
