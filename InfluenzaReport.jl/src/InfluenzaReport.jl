@@ -7,19 +7,17 @@ generally useful functions.
 """
 module InfluenzaReport
 
-using FASTX
-using BioSequences
-using ErrorTypes
-using Influenza
-using KMATools
-using Printf
-using Transducers
-using Folds
-using Plots
-using CodecZlib
-using Serialization
-
-using Influenza: Assembly, Reference, AlignedAssembly
+using FASTX: FASTA
+using BioSequences: LongDNASeq, DNA, isgap
+using ErrorTypes: Option, some, none, unwrap, unwrap_or, @unwrap_or, and_then, map_or, is_error
+using Influenza: Influenza, Segment, Assembly, Reference, AlignedAssembly, Protein
+using KMATools: KMATools
+using Printf: @sprintf
+using Transducers: Map
+using Folds: Folds
+using Plots: Plots
+using CodecZlib: GzipDecompressorStream
+using Serialization: serialize
 
 const N_SEGMENTS = length(instances(Segment))
 const SegmentTuple{T} = NTuple{N_SEGMENTS, T}

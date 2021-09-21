@@ -305,7 +305,7 @@ if IS_ILLUMINA:
             ),
             report="report.txt",
         params:
-            juliacmd=f"JULIA_LOAD_PATH={os.path.join(SNAKEDIR, 'InfluenzaReport.jl')} julia --startup-file=no",
+            juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
             refdir=REFDIR
         log: "tmp/log/report.txt"
@@ -340,7 +340,7 @@ elif IS_NANOPORE:
             ),
             report="report.txt",
         params:
-            juliacmd=f"JULIA_LOAD_PATH={os.path.join(SNAKEDIR, 'InfluenzaReport.jl')} julia --startup-file=no",
+            juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
             refdir=REFDIR
         log: "tmp/log/report.txt"

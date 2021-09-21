@@ -147,7 +147,7 @@ function plot_depths(
     isdir(dir) || mkdir(dir)
     @assert length(samplenames) == length(depthsvec)
     for (samplename, m_depths_tuple) in zip(samplenames, depthsvec)
-        savefig(
+        Plots.savefig(
             make_depth_plot(map(m_depths_tuple) do m_depths
                 and_then(i -> i.template_depths, Vector{UInt32}, m_depths)
             end),
@@ -156,7 +156,7 @@ function plot_depths(
         if any(m_depths_tuple) do m_depths
             map_or(d -> d.dedicated_assembly, m_depths, false)
         end
-            savefig(
+        Plots.savefig(
                 make_depth_plot(map(m_depths_tuple) do m_depths
                     and_then(i -> i.assembly_depths, Vector{UInt32}, m_depths)
                 end),
@@ -167,13 +167,13 @@ function plot_depths(
 end
 
 function make_depth_plot(depths::SegmentTuple{Option{Vector{UInt32}}})
-    plt = plot(ylabel="Log10 depths", xticks=nothing, ylim=(-0.1, 5))
+    plt = Plots.plot(ylabel="Log10 depths", xticks=nothing, ylim=(-0.1, 5))
     for (index, m_depth) in enumerate(depths)
         depth = @unwrap_or m_depth continue
         segment = Segment(index - 1)
         ys = log10.(depth)
         xs = range(0.0, stop=1.0, length=length(ys))
-        plot!(plt, xs, ys, label=string(segment), legend=:outertopright, color=index)
+        Plots.plot!(plt, xs, ys, label=string(segment), legend=:outertopright, color=index)
     end
     return plt
 end

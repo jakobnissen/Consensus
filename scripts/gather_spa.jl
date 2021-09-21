@@ -1,11 +1,11 @@
 # In this script, it gathers all SPA hits, then creates new indexable
 # FASTA files for each samplename based on what segments is SPA aligns to
 
-using InfluenzaCore
+using InfluenzaCore: Segment
 using ErrorTypes
-using FASTX
-using BioSequences
-import KMATools
+using FASTX: FASTA
+using BioSequences: LongDNASeq
+import KMATools: KMATools
 
 imap(f) = x -> Iterators.map(f, x)
 ifilter(f) = x -> Iterators.filter(f, x)

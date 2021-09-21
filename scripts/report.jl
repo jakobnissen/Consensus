@@ -1,6 +1,6 @@
 fludirname = dirname(dirname(abspath(@__FILE__)))
 push!(LOAD_PATH, joinpath(fludirname, "InfluenzaReport.jl"))
-using InfluenzaReport
+using InfluenzaReport: InfluenzaReport
 
 if abspath(PROGRAM_FILE) == @__FILE__
     if length(ARGS) != 3
