@@ -8,6 +8,9 @@ function illumina_snakemake_entrypoint(
 )::Nothing
     samplenames = sort!(readdir(aln_dir))
 
+    fastp_paths = [joinpath(tmp_dir, "trim", sname, "report.json") for sname in samplenames]
+    read_errors = map(check_reads, fastp_paths)
+
     asm_paths = [joinpath(aln_dir, samplename, "kma2.fsa") for samplename in samplenames]
     aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.json"), true)
 
@@ -18,9 +21,9 @@ function illumina_snakemake_entrypoint(
         (template=joinpath(aln_dir, samplename, "kma1.mat.gz"), assembly=joinpath(aln_dir, samplename, "kma2.mat.gz"))
     end
     depths = load_depths_and_errors(aln_asms, depthpaths)
-    plot_depths(depths_plot_dir, samplenames, depths)
+    #plot_depths(depths_plot_dir, samplenames, depths)
 
-    passes = report(report_path, samplenames, aln_asms, depths)
+    passes = report(report_path, samplenames, aln_asms, depths, read_errors)
     write_files(cons_dir, tmp_dir, samplenames, aln_asms, passes)
 end
 
@@ -30,18 +33,21 @@ function nanopore_snakemake_entrypoint(
     aln_dir::AbstractString, # dir of medaka / kma aln
     cons_dir::AbstractString,
     depths_plot_dir::AbstractString,
-    tmp_dir::AbstractString
+    tmp_dir::AbstractString,
 )::Nothing
     samplenames = sort!(readdir(aln_dir))
+
+    fastp_paths = [joinpath(tmp_dir, "trim", sname, "report.json") for sname in samplenames]
+    read_errors = map(check_reads, fastp_paths)
 
     asm_paths = [joinpath(aln_dir, samplename, "medaka", "consensus.fasta") for samplename in samplenames]
     aln_asms = load_aligned_assemblies(asm_paths, joinpath(ref_dir, "refs.json"), false)
 
     depthpaths = [joinpath(aln_dir, samplename, "kma1.mat.gz") for samplename in samplenames]
     depths = load_depths_and_errors(aln_asms, depthpaths)
-    plot_depths(depths_plot_dir, samplenames, depths)
+    #plot_depths(depths_plot_dir, samplenames, depths)
 
-    passes = report(report_path, samplenames, aln_asms, depths)
+    passes = report(report_path, samplenames, aln_asms, depths, read_errors)
     write_files(cons_dir, tmp_dir, samplenames, aln_asms, passes)
 end
 
@@ -54,11 +60,12 @@ function report(
     samplenames::Vector{<:AbstractString},
     alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
     depths::Vector{SegmentTuple{Option{Depths}}},
+    read_errors::Vector{Vector{ReadError}},
 )::Vector{SegmentTuple{Bool}}
     result = SegmentTuple{Bool}[]
     open(report_path, "w") do io
-        for (samplename, alnasm, depth) in zip(samplenames, alnasms, depths)
-            push!(result, report(io, samplename, alnasm, depth))
+        for (samplename, alnasm, depth, readerrs) in zip(samplenames, alnasms, depths, read_errors)
+            push!(result, report(io, samplename, alnasm, depth, readerrs))
         end
         print(io, '\n')
     end
@@ -69,13 +76,14 @@ function report(
     io::IO,
     samplename::AbstractString,
     alnasms::SegmentTuple{Option{AlignedAssembly}},
-    depths::SegmentTuple{Option{Depths}}
+    depths::SegmentTuple{Option{Depths}},
+    read_errors::Vector{ReadError},
 )::SegmentTuple{Bool}
     passes = Bool[]
     println(io, samplename)
     for (i, (alnasm, depth)) in enumerate(zip(alnasms, depths))
         segment = Segment(i - 1)
-        (buf, pass) = report(alnasm, depth)
+        (buf, pass) = report(alnasm, depth, read_errors)
         print(io,
             '\t', pass ? "     " : "FAIL ",
             rpad(string(segment) * ":", 4),
@@ -90,9 +98,16 @@ end
 function report(
     maybe_alnasm::Option{AlignedAssembly},
     maybe_depth::Option{Depths},
+    read_errors::Vector{ReadError},
 )::Tuple{IOBuffer, Bool}
     buf = IOBuffer()
     passed = true
+
+    # Check reads
+    for read_err in read_errors
+        println(buf, "\t\t", read_err)
+    end
+
     if is_error(maybe_alnasm)
         println(buf, " Missing segment")
         return (buf, false)

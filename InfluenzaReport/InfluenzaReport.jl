@@ -18,6 +18,7 @@ using Folds: Folds
 using Plots: Plots
 using CodecZlib: GzipDecompressorStream
 using Serialization: serialize
+using JSON3: JSON3
 
 const N_SEGMENTS = length(instances(Segment))
 const SegmentTuple{T} = NTuple{N_SEGMENTS, T}
@@ -68,6 +69,7 @@ function split_segment(source::AbstractString, s::Union{String, SubString{String
     end
 end
 
+include("readqc.jl")
 include("alignedassembly.jl")
 include("depths.jl")
 include("report.jl")
