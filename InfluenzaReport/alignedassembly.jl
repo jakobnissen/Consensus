@@ -179,7 +179,7 @@ function write_consensus(
             is_passed && write(cura_dna_writer, dna_record)
 
             # Write proteins
-            m_aaseqs = translate_proteins(alnasm)
+            m_aaseqs = Influenza.translate_proteins(alnasm)
             for (protein, m_aaseq) in zip(alnasm.proteins, m_aaseqs)
                 orfs = @unwrap_or protein.orfs continue
                 aaseq = @unwrap_or m_aaseq continue
