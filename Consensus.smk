@@ -70,7 +70,7 @@ SEGMENTS = ["PB2", "PB1", "PA", "HA", "NP", "NA", "MP", "NS"]
 
 def done_input(wildcards):
     # Add report and the commit
-    inputs = ["report.txt"]
+    inputs = ["report_consensus.txt"]
 
     for samplename in SAMPLENAMES:
         inputs.append(f"consensus/{samplename}/consensus.fna")
@@ -79,9 +79,9 @@ def done_input(wildcards):
 
 rule all:
     input: done_input
-    output: "commit.txt"
+    output: "commit_consensus.txt"
     params: SNAKEDIR
-    shell: "git -C {params} rev-parse --short HEAD > {output} && cp {params}/copy_readme.md README.md"
+    shell: "git -C {params} rev-parse --short HEAD > {output} && cp {params}/copy_readme.md README_CONSENSUS.md"
 
 #################################
 # REFERENCE-ONLY PART OF PIPELINE
@@ -303,12 +303,12 @@ if IS_ILLUMINA:
             consensus=expand("consensus/{samplename}/{type}.{nuc}",
                 samplename=SAMPLENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
             ),
-            report="report.txt",
+            report="report_consensus.txt",
         params:
             juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
             refdir=REFDIR
-        log: "tmp/log/report.txt"
+        log: "tmp/log/report_consensus.txt"
         threads: workflow.cores
         shell: "{params.juliacmd} -t {threads} {params.scriptpath} illumina . {params.refdir} > {log}"
 
@@ -338,11 +338,11 @@ elif IS_NANOPORE:
             consensus=expand("consensus/{samplename}/{type}.{nuc}",
                 samplename=SAMPLENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
             ),
-            report="report.txt",
+            report="report_consensus.txt",
         params:
             juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
             refdir=REFDIR
-        log: "tmp/log/report.txt"
+        log: "tmp/log/report_consensus.txt"
         threads: workflow.cores
         shell: "{params.juliacmd} -t {threads} {params.scriptpath} nanopore . {params.refdir} > {log}"
