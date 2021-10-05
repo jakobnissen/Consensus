@@ -22,7 +22,10 @@ def get_read_pairs(directory):
     for filename in filenames:
         match = pattern.match(filename)
         if match is None:
-            raise ValueError("Filename {} does not match pattern ".format(filename) + PATTERN)
+            raise ValueError(
+                ("Filename {} does not match pattern ".format(filename) + PATTERN +
+                " Are you sure it is an Illumina FASTQ file?")
+                )
 
         samplename, samplenumber, readnumber = match.groups()
 
@@ -43,7 +46,7 @@ def get_read_pairs(directory):
                 print(file)
             print("")
 
-        raise ValueError("Some files not found in pairs")
+        raise ValueError("Some FASTQ files not found in pairs")
 
     return reads
 

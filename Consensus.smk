@@ -5,7 +5,7 @@ SNAKEDIR = os.path.dirname(workflow.snakefile)
 sys.path.append(os.path.join(SNAKEDIR, "scripts"))
 import tools
 
-JULIA_COMMAND = f"JULIA_LOAD_PATH={SNAKEDIR} julia --startup-file=no"
+JULIA_COMMAND = f"JULIA_LOAD_PATH='{SNAKEDIR}' julia --startup-file=no"
 
 ######################################################
 # GLOBAL CONSTANTS
@@ -81,7 +81,7 @@ rule all:
     input: done_input
     output: "commit_consensus.txt"
     params: SNAKEDIR
-    shell: "git -C {params} rev-parse --short HEAD > {output} && cp {params}/copy_readme.md README_CONSENSUS.md"
+    shell: "git -C {params:q} rev-parse --short HEAD > {output} && cp {params:q}/copy_readme.md README_CONSENSUS.md"
 
 #################################
 # REFERENCE-ONLY PART OF PIPELINE
@@ -97,18 +97,13 @@ rule index_ref:
         outpath=REFOUTDIR + "/refs",
     log: "tmp/log/kma_ref.log"
     
-    shell: "kma index -nbp -k 12 -Sparse - -i {input} -o {params.outpath} 2> {log}"
+    shell: "kma index -nbp -k 12 -Sparse - -i {input:q} -o {params.outpath:q} 2> {log}"
 
 ############################
 # CONSENSUS PART OF PIPELINE
 ############################
-rule gzip:
-    input: "{base}"
-    output: "{base}.gz"
-    shell: "gzip -k {input}"
-
 if IS_ILLUMINA:
-    ruleorder: second_kma_map > first_kma_map > gzip
+    ruleorder: second_kma_map > first_kma_map
 
     rule fastp:
         input:
@@ -122,10 +117,10 @@ if IS_ILLUMINA:
         log: "tmp/log/fastp/{samplename}.log"
         threads: 2
         shell:
-            'fastp -i {input.fw} -I {input.rv} '
-            '-o {output.fw} -O {output.rv} --html {output.html} --json {output.json} '
+            'fastp -i {input.fw:q} -I {input.rv:q} '
+            '-o {output.fw:q} -O {output.rv:q} --html {output.html:q} --json {output.json:q} '
             '--disable_adapter_trimming --trim_poly_g --cut_tail --cut_front --low_complexity_filter '
-            '--complexity_threshold 50 --thread {threads} 2> {log}'
+            '--complexity_threshold 50 --thread {threads} 2> {log:q}'
 
     rule map_best_template:
         input:
@@ -144,7 +139,7 @@ if IS_ILLUMINA:
             # covered with high depth at the covered areas:
             # Con: Majority vote will win away, so it'll just fuck up if we pick a
             # uniformly, but low covered reference anyway
-            "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
+            "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db:q} "
             "-ss c -t {threads} -Sparse 2> {log}"        
 
 elif IS_NANOPORE:
@@ -157,7 +152,7 @@ elif IS_NANOPORE:
         log: "tmp/log/fastp/{samplename}.log"
         threads: 2
         shell:
-            'fastp -i {input} -o {output.reads} --html {output.html} '
+            'fastp -i {input:p} -o {output.reads} --html {output.html} '
             '--json {output.json} --disable_adapter_trimming  --disable_trim_poly_g '
             '--cut_window_size 10 --cut_mean_quality 10 --cut_tail --cut_front --low_complexity_filter  '
             '--complexity_threshold 50 --length_limit 2400 --length_required 100 '
@@ -175,7 +170,7 @@ elif IS_NANOPORE:
         log: "tmp/log/aln/{samplename}.initial.log"
         shell:
             # See above comment in rule with same name
-            "kma -i {input.reads} -o {params.outbase} -t_db {params.db} "
+            "kma -i {input.reads} -o {params.outbase:q} -t_db {params.db:q} "
             "-ss c -t {threads} -Sparse 2> {log}"
 
 ### Both platforms
@@ -186,7 +181,7 @@ rule collect_best_templates:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/gather_spa.jl",
         refpath=REFDIR
-    shell: "{params.juliacmd} {params.scriptpath} tmp/aln {params.refpath}"
+    shell: "{params.juliacmd} {params.scriptpath:q} tmp/aln {params.refpath:q}"
 
 rule first_kma_index:
     input: "tmp/aln/{samplename}/cat.fna"
@@ -201,7 +196,7 @@ rule first_kma_index:
     # The pipeline is very sensitive to the value of k here.
     # Too low means the mapping is excruciatingly slow,
     # too high results in poor mapping quality.
-    shell: "kma index -nbp -k 10 -i {input} -o {params.t_db} 2> {log}"
+    shell: "kma index -nbp -k 10 -i {input:q} -o {params.t_db} 2> {log}"
 
 if IS_ILLUMINA:
     rule first_kma_map:
@@ -219,7 +214,7 @@ if IS_ILLUMINA:
         log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
         shell:
-            "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
+            "kma -ipe {input.fw:q} {input.rv:q} -o {params.outbase} -t_db {params.db} "
             "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}"
 
 elif IS_NANOPORE:
@@ -237,7 +232,7 @@ elif IS_NANOPORE:
         log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
         shell:
-            "kma -i {input.reads} -o {params.outbase} -t_db {params.db} "
+            "kma -i {input.reads:q} -o {params.outbase} -t_db {params.db} "
             "-t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
 
 # Both platforms
@@ -253,7 +248,7 @@ rule remove_primers:
         minmatches=4,
         fuzzylen=8,
     shell: """if [ -s {input.primers} ]; then
-    {params.juliacmd} {params.scriptpath} {input.primers} \
+    {params.juliacmd:q} {params.scriptpath:q} {input.primers:q} \
 {input.con} {output} {params.minmatches} {params.fuzzylen} > {log}
 else
     cp {input.con} {output}
@@ -310,7 +305,9 @@ if IS_ILLUMINA:
             refdir=REFDIR
         log: "tmp/log/report_consensus.txt"
         threads: workflow.cores
-        shell: "{params.juliacmd} -t {threads} {params.scriptpath} illumina . {params.refdir} > {log}"
+        shell: 
+            "{params.juliacmd} -t {threads} {params.scriptpath:q} "
+            "illumina . {params.refdir:q} > {log}"
 
 elif IS_NANOPORE:
     rule medaka:
@@ -323,8 +320,8 @@ elif IS_NANOPORE:
         params:
             model=lambda wc: "r941_min_high_g360" if PORE == 9 else "r103_min_high_g360"
         shell:
-            "medaka_consensus -i {input.reads} -d {input.draft} -o {output} -t {threads} "
-            "-m {params.model} 2> {log}"
+            "medaka_consensus -i {input.reads} -d {input.draft} -o {output} "
+            "-t {threads} -m {params.model} 2> {log}"
 
     rule clean_medaka:
         input: rules.medaka.output
@@ -345,4 +342,4 @@ elif IS_NANOPORE:
             refdir=REFDIR
         log: "tmp/log/report_consensus.txt"
         threads: workflow.cores
-        shell: "{params.juliacmd} -t {threads} {params.scriptpath} nanopore . {params.refdir} > {log}"
+        shell: "{params.juliacmd} -t {threads} {params.scriptpath:q} nanopore . {params.refdir:q} > {log}"

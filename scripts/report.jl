@@ -16,7 +16,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         exit(1)
     end
 
-    reportpath = joinpath(outdir, "report.txt")
+    reportpath = joinpath(outdir, "report_consensus.txt")
     tmpdir = joinpath(outdir, "tmp")
     alndir = joinpath(tmpdir, "aln")
     consdir = joinpath(outdir, "consensus")
