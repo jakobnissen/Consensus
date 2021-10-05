@@ -256,7 +256,7 @@ rule remove_primers:
         minmatches=4,
         fuzzylen=8,
     shell: """if [ -s {input.primers} ]; then
-    {params.juliacmd:q} {params.scriptpath:q} {input.primers:q} \
+    {params.juliacmd} {params.scriptpath:q} {input.primers:q} \
 {input.con} {output} {params.minmatches} {params.fuzzylen} > {log}
 else
     cp {input.con} {output}
