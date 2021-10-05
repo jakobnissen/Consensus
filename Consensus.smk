@@ -174,8 +174,16 @@ elif IS_NANOPORE:
             "-ss c -t {threads} -Sparse 2> {log}"
 
 ### Both platforms
+# This rule downloads and installs all Julia packages needed
+rule instantiate:
+    output: "tmp/instantiated"
+    params: JULIA_COMMAND
+    shell: "{params} -e 'using Pkg; Pkg.instantiate()' && touch {output}"
+
 rule collect_best_templates:
-    input: expand("tmp/aln/{samplename}/sparse.spa", samplename=SAMPLENAMES)
+    input:
+        spas=expand("tmp/aln/{samplename}/sparse.spa", samplename=SAMPLENAMES),
+        inst="tmp/instantiated"
     output: temp(expand("tmp/aln/{samplename}/cat.fna", samplename=SAMPLENAMES))
     params:
         juliacmd=JULIA_COMMAND,
