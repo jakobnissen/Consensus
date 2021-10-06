@@ -176,9 +176,9 @@ elif IS_NANOPORE:
 ### Both platforms
 # This rule downloads and installs all Julia packages needed
 rule instantiate:
-    output: "tmp/instantiated"
+    output: touch("tmp/instantiated")
     params: JULIA_COMMAND
-    shell: "{params} -e 'using Pkg; Pkg.instantiate()' && touch {output}"
+    shell: "{params} -e 'using Pkg; Pkg.instantiate()'"
 
 rule collect_best_templates:
     input:
@@ -333,8 +333,8 @@ elif IS_NANOPORE:
 
     rule clean_medaka:
         input: rules.medaka.output
-        output: "tmp/aln/{samplename}/moved.txt"
-        shell: "rm {input}/*.bam {input}/*.bai {input}/*.hdf && touch {output}"
+        output: touch("tmp/aln/{samplename}/moved.txt")
+        shell: "rm {input}/*.bam {input}/*.bai {input}/*.hdf"
 
     rule create_report:
         input:

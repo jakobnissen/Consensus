@@ -9,7 +9,7 @@ def get_read_pairs(directory):
         filenames = sorted(next(os.walk(directory))[2])
     except StopIteration:
         raise FileNotFoundError("Must specify at least one read pair. "
-                                "Are you sure you got the directory correct? "
+                                "Are you sure you got the read directory correct? "
                                 f"{os.path.abspath(directory)}")
 
     # See Illumina's "Naming convention" documentation.
