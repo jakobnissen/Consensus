@@ -73,7 +73,8 @@ def done_input(wildcards):
     inputs = ["report_consensus.txt"]
 
     for samplename in SAMPLENAMES:
-        inputs.append(f"consensus/{samplename}/consensus.fna")
+        inputs.append(f"sequences/{samplename}/all.fna")
+        inputs.append(f"depths/{samplename}_template.pdf")
 
     return inputs
 
@@ -96,8 +97,8 @@ rule index_ref:
     params:
         outpath=REFOUTDIR + "/refs",
     log: "tmp/log/kma_ref.log"
-    
-    shell: "kma index -nbp -k 12 -Sparse - -i {input:q} -o {params.outpath:q} 2> {log}"
+    # Set k from 16 to 12 for more sensitivity, but slower. May not be needed.
+    shell: "kma index -nbp -k 12 -i {input:q} -o {params.outpath:q} 2> {log}"
 
 ############################
 # CONSENSUS PART OF PIPELINE
@@ -127,10 +128,10 @@ if IS_ILLUMINA:
             fw=rules.fastp.output.fw,
             rv=rules.fastp.output.rv,
             index=rules.index_ref.output
-        output: "tmp/aln/{samplename}/sparse.spa"
+        output: "tmp/aln/{samplename}/initial.res"
         params:
             db=REFOUTDIR + "/refs",
-            outbase="tmp/aln/{samplename}/sparse"
+            outbase="tmp/aln/{samplename}/initial"
         threads: 2
         log: "tmp/log/aln/{samplename}.initial.log"
         shell:
@@ -140,7 +141,7 @@ if IS_ILLUMINA:
             # Con: Majority vote will win away, so it'll just fuck up if we pick a
             # uniformly, but low covered reference anyway
             "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db:q} "
-            "-ss c -t {threads} -Sparse 2> {log}"        
+            "-t {threads} -nc -nf 2> {log}"        
 
 elif IS_NANOPORE:
     rule fastp:
@@ -162,32 +163,32 @@ elif IS_NANOPORE:
         input:
             reads=rules.fastp.output.reads,
             index=rules.index_ref.output
-        output: "tmp/aln/{samplename}/sparse.spa"
+        output: "tmp/aln/{samplename}/initial.res"
         params:
             db=REFOUTDIR + "/refs", # same as index_reffile param
-            outbase="tmp/aln/{samplename}/sparse"
+            outbase="tmp/aln/{samplename}/initial"
         threads: 1
         log: "tmp/log/aln/{samplename}.initial.log"
         shell:
             # See above comment in rule with same name
             "kma -i {input.reads} -o {params.outbase:q} -t_db {params.db:q} "
-            "-ss c -t {threads} -Sparse 2> {log}"
+            "-t {threads} -nc -nf 2> {log}"
 
 ### Both platforms
 # This rule downloads and installs all Julia packages needed
 rule instantiate:
-    output: touch("tmp/instantiated")
+    output: touch(REFOUTDIR + "/cons_instantiated")
     params: JULIA_COMMAND
     shell: "{params} -e 'using Pkg; Pkg.instantiate()'"
 
 rule collect_best_templates:
     input:
-        spas=expand("tmp/aln/{samplename}/sparse.spa", samplename=SAMPLENAMES),
-        inst="tmp/instantiated"
+        spas=expand("tmp/aln/{samplename}/initial.res", samplename=SAMPLENAMES),
+        inst=REFOUTDIR + "/cons_instantiated"
     output: temp(expand("tmp/aln/{samplename}/cat.fna", samplename=SAMPLENAMES))
     params:
         juliacmd=JULIA_COMMAND,
-        scriptpath=f"{SNAKEDIR}/scripts/gather_spa.jl",
+        scriptpath=f"{SNAKEDIR}/scripts/gather_res.jl",
         refpath=REFDIR
     shell: "{params.juliacmd} {params.scriptpath:q} tmp/aln {params.refpath:q}"
 
@@ -244,7 +245,11 @@ elif IS_NANOPORE:
             "-t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
 
 # Both platforms
-rule remove_primers:
+# We need to map to multiple templates per segments to catch superinfections.
+# but I haven't nailed down the heuristics for in gather_res.jl for detecting
+# superinfections. If they are not truly present, the multiple assemblies will
+# quickly converge. We trim primers here and remove converged assemblies
+rule remove_primers_dedup:
     input:
         con=rules.first_kma_map.output.fsa,
         primers=f"{REFDIR}/primers.fna"
@@ -255,9 +260,10 @@ rule remove_primers:
         scriptpath=f"{SNAKEDIR}/scripts/trim_consensus.jl",
         minmatches=4,
         fuzzylen=8,
+        id=0.95,
     shell: """if [ -s {input.primers} ]; then
     {params.juliacmd} {params.scriptpath:q} {input.primers:q} \
-{input.con} {output} {params.minmatches} {params.fuzzylen} > {log}
+{input.con} {output} {params.minmatches} {params.fuzzylen} {params.id} > {log}
 else
     cp {input.con} {output}
 fi
@@ -267,7 +273,7 @@ if IS_ILLUMINA:
     # We now re-map to the created consensus sequence in order to accurately
     # estimate depths and coverage, and get a more reliable assembly seq.
     rule second_kma_index:
-        input: rules.remove_primers.output
+        input: rules.remove_primers_dedup.output
         output:
             comp=temp("tmp/aln/{samplename}/cat.trimmed.comp.b"),
             name=temp("tmp/aln/{samplename}/cat.trimmed.name"),
@@ -303,10 +309,9 @@ if IS_ILLUMINA:
             assembly=expand("tmp/aln/{samplename}/kma2.fsa", samplename=SAMPLENAMES),
             res=expand("tmp/aln/{samplename}/kma2.res", samplename=SAMPLENAMES)
         output:
-            consensus=expand("consensus/{samplename}/{type}.{nuc}",
-                samplename=SAMPLENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
-            ),
-            report="report_consensus.txt",
+            consensus=expand("sequences/{samplename}/all.fna", samplename=SAMPLENAMES),
+            depth=expand("depths/{samplename}_template.pdf", samplename=SAMPLENAMES),
+            report="report_consensus.txt"
         params:
             juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",
@@ -321,7 +326,7 @@ elif IS_NANOPORE:
     rule medaka:
         input: 
             reads=rules.fastp.output.reads,
-            draft=rules.remove_primers.output
+            draft=rules.remove_primers_dedup.output
         output: directory("tmp/aln/{samplename}/medaka")
         log: "tmp/log/aln/medaka_{samplename}.log"
         threads: 2
@@ -340,10 +345,9 @@ elif IS_NANOPORE:
         input:
             assembly=expand("tmp/aln/{samplename}/moved.txt", samplename=SAMPLENAMES),
         output:
-            consensus=expand("consensus/{samplename}/{type}.{nuc}",
-                samplename=SAMPLENAMES, type=["consensus", "curated"], nuc=["fna", "faa"]
-            ),
-            report="report_consensus.txt",
+            consensus=expand("sequences/{samplename}/all.fna", samplename=SAMPLENAMES),
+            depth=expand("depths/{samplename}_template.pdf", samplename=SAMPLENAMES),
+            report="report_consensus.txt"
         params:
             juliacmd=JULIA_COMMAND,
             scriptpath=f"{SNAKEDIR}/scripts/report.jl",

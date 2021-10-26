@@ -1,5 +1,4 @@
-fludirname = dirname(dirname(abspath(@__FILE__)))
-include(joinpath(fludirname, "InfluenzaReport", "InfluenzaReport.jl"))
+using Consensus: Consensus
 
 if abspath(PROGRAM_FILE) == @__FILE__
     if length(ARGS) != 3
@@ -19,12 +18,12 @@ if abspath(PROGRAM_FILE) == @__FILE__
     reportpath = joinpath(outdir, "report_consensus.txt")
     tmpdir = joinpath(outdir, "tmp")
     alndir = joinpath(tmpdir, "aln")
-    consdir = joinpath(outdir, "consensus")
+    consdir = joinpath(outdir, "sequences")
     plotdir = joinpath(outdir, "depths")
     
     if illumina
-        InfluenzaReport.illumina_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
+        Consensus.illumina_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
     else
-        InfluenzaReport.nanopore_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
+        Consensus.nanopore_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
     end
 end

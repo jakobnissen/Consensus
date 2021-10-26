@@ -49,71 +49,74 @@ function Depths(template_mapping::Vector{KMARowType}, assembly_mapping::Vector{K
     return Depths(template_depths, assembly_depths, template_mapping !== assembly_mapping)
 end
 
-function load_depths_and_errors(
-    alnasms::Vector{SegmentTuple{Option{AlignedAssembly}}},
-    depthspaths::Vector
-)::Vector{SegmentTuple{Option{Depths}}}
-    depths = load_depths(depthspaths)
-    @assert length(alnasms) == length(depthspaths)
-    for (alnasm_tup, depth_tup) in zip(alnasms, depths)
-        for (m_alnasm, m_depth) in zip(alnasm_tup, depth_tup)
-            alnasm = @unwrap_or m_alnasm continue
-            depth = @unwrap_or m_depth continue
-            add_depths_errors!(alnasm, depth)
-        end
+function load_depths_and_errors(alnasms::Vector{AlignedAssembly}, args...)::Vector{Depths}
+    depths = load_depths(alnasms, args...)
+    for (alnasm, depth) in zip(alnasms, depths)
+        add_depths_errors!(alnasm, depth)
     end
     return depths
 end
 
 # Single-depthspath method, for approximating assembly-level mapping
 function load_depths(
-    depthspaths::Vector{String}
-)::Vector{SegmentTuple{Option{Depths}}}
-    depthspaths |> Map() do depthspath
-        matdata = open(GzipDecompressorStream, depthspath) do io
-            KMATools.parse_mat(io, depthspath)
-        end
-        maybe_kmarows_tup = split_mat_segments(matdata, depthspath)
-        map(maybe_kmarows_tup) do maybe_kmarows
-            and_then(Depths, maybe_kmarows) do kma_rows
-                Depths(kma_rows, kma_rows)
-            end
-        end
-    end |> Folds.collect
+    alnasms::Vector{AlignedAssembly},
+    tdepths::String
+)::Vector{Depths}
+    map(load_depths_from_mat(alnasms, tdepths)) do rows
+        Depths(rows, rows)
+    end
 end
 
 # Same signature as above, except depthspaths are pairs of strings,
 # first for template mapping, second for assembly mapping
 function load_depths(
-    depthspaths::Vector{NamedTuple{(:template, :assembly), Tuple{String, String}}}
-)::Vector{SegmentTuple{Option{Depths}}}
-    depthspaths |> Map() do depthspair
-        temp_tuple = split_mat_segments(open(GzipDecompressorStream, depthspair.template) do io
-            KMATools.parse_mat(io, depthspair.template)
-        end, depthspair.template)
-        assm_tuple = split_mat_segments(open(GzipDecompressorStream, depthspair.assembly) do io
-            KMATools.parse_mat(io, depthspair.assembly)
-        end, depthspair.assembly)
-        ntuple(N_SEGMENTS) do i
-            template = @unwrap_or temp_tuple[i] return none(Depths)
-            assembly = @unwrap_or assm_tuple[i] return none(Depths)
-            some(Depths(template, assembly))
-        end
-    end |> Folds.collect
+    alnasms::Vector{AlignedAssembly},
+    tdepths::String,
+    adepths::String
+)::Vector{Depths}
+    trows = load_depths_from_mat(alnasms, tdepths)
+    arows = load_depths_from_mat(alnasms, adepths)
+    map(i -> Depths(i...), zip(trows, arows))
 end
 
-function split_mat_segments(
-    matdata::MatType,
-    path::AbstractString
-)::SegmentTuple{Option{Vector{KMARowType}}}
-    result = fill(none(Vector{KMARowType}), N_SEGMENTS)
-    for (header, rows) in matdata
-        _, segment = split_segment(path, strip(header))
-        index = Integer(segment) + 0x01
-        is_error(result[index]) || error("Segment $segment present twice in $path")
-        result[index] = some(rows)
+function get_primary(
+    alnasms::Vector{AlignedAssembly},
+    depths::Vector{Depths}
+)::Vector{Bool}
+    primary = Dict{Segment, Depths}()
+    max_depth = Dict(s => 0.0 for s in instances(Segment))
+    for (d, a) in zip(depths, alnasms)
+        segment = a.reference.segment
+        mean = mean_depth(d)
+        if mean > max_depth[segment]
+            max_depth[segment] = mean
+            primary[segment] = d
+        end
     end
-    return Tuple(result)
+    [d === primary[a.reference.segment] for (d,a) in zip(depths, alnasms)]
+end
+
+function load_depths_from_mat(
+    alnasms::Vector{AlignedAssembly},
+    path::String
+)::Vector{Vector{KMARowType}}
+    indexof = Dict(
+        (a.assembly.name, a.reference.segment) => i
+        for (i, a) in enumerate(alnasms)
+    )
+    data = open(GzipDecompressorStream, path) do io
+        KMATools.parse_mat(io, path)
+    end
+    # There are some segments in kma1.mat.gz which has been removed in
+    # earlier states of the pipeline.
+    # We set an index of nothing for those, then filter them away
+    withindex = map(data) do (header, rows)
+        key = split_segment(strip(header))
+        (get(indexof, key, nothing), rows)
+    end
+    filter!(i -> first(i) !== nothing, withindex)
+    @assert length(withindex) == length(alnasms)
+    map(last, sort!(withindex, by=first))
 end
 
 function add_depths_errors!(
@@ -140,39 +143,23 @@ function add_depths_errors!(
 end
 
 function plot_depths(
-    dir::AbstractString,
-    samplenames::Vector{String},
-    depthsvec::Vector{SegmentTuple{Option{Depths}}}
-)
-    isdir(dir) || mkdir(dir)
-    @assert length(samplenames) == length(depthsvec)
-    for (samplename, m_depths_tuple) in zip(samplenames, depthsvec)
-        Plots.savefig(
-            make_depth_plot(map(m_depths_tuple) do m_depths
-                and_then(i -> i.template_depths, Vector{UInt32}, m_depths)
-            end),
-            joinpath(dir, samplename * "_template.pdf")
-        )
-        if any(m_depths_tuple) do m_depths
-            map_or(d -> d.dedicated_assembly, m_depths, false)
-        end
-        Plots.savefig(
-                make_depth_plot(map(m_depths_tuple) do m_depths
-                    and_then(i -> i.assembly_depths, Vector{UInt32}, m_depths)
-                end),
-                joinpath(dir, samplename * "_assembly.pdf")
-            )
-        end
+    template_path::String,
+    assembly_path::String,
+    v::Vector{Tuple{Segment, Depths}}
+)::Nothing
+    Plots.savefig(make_depth_plot([(s, d.template_depths) for (s, d) in v]), template_path)
+    if isempty(v) || first(v)[2].dedicated_assembly
+        Plots.savefig(make_depth_plot([(s, d.assembly_depths) for (s, d) in v]), assembly_path)
     end
+    return nothing
 end
 
-function make_depth_plot(depths::SegmentTuple{Option{Vector{UInt32}}})
+function make_depth_plot(v::Vector{<:Tuple{Segment, Vector{<:Unsigned}}})
     plt = Plots.plot(ylabel="Log10 depths", xticks=nothing, ylim=(-0.1, 5))
-    for (index, m_depth) in enumerate(depths)
-        depth = @unwrap_or m_depth continue
-        segment = Segment(index - 1)
+    for (segment, depth) in v
         ys = log10.(depth)
         xs = range(0.0, stop=1.0, length=length(ys))
+        index = Integer(segment) + 1
         Plots.plot!(plt, xs, ys, label=string(segment), legend=:outertopright, color=index)
     end
     return plt
