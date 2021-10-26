@@ -132,7 +132,7 @@ function write_sequences(
         # Primary / secondary DNA
         if passed[i]
             filename = primary[i] ? "primary.fna" : "secondary.fna"
-            rec = FASTA.Record(samplename, dnastr)
+            rec = FASTA.Record("$(samplename)_$(segment)", dnastr)
             push!(get!(valtype(file_contents), file_contents, filename), rec)
         end
 
@@ -146,7 +146,7 @@ function write_sequences(
             rec = FASTA.Record("$(id)_$(primstr)_$(orfstr)", aaseq)
             push!(get!(valtype(file_contents), file_contents, "all.faa"), rec)
             if passed[i]
-                filename = primary[i] ? "primary.fna" : "secondary.fna"
+                filename = primary[i] ? "primary.faa" : "secondary.faa"
                 rec = FASTA.Record("$(id)_$(orfstr)", aaseq)
                 push!(get!(valtype(file_contents), file_contents, filename), rec)
             end

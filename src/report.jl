@@ -47,7 +47,7 @@ function illumina_snakemake_entrypoint(
         write_sequences(p.seq_dir, p.sample, alnasmv, pass, prim)
     end
 
-    open(joinpath(tmp_dir, "internal.json"), "w") do io
+    open(GzipCompressorStream, joinpath(tmp_dir, "internal.jls.gz"), "w") do io
         serialize_alnasms(io, aln_asms, passes, isprimary)
     end
 
@@ -98,7 +98,7 @@ function nanopore_snakemake_entrypoint(
         write_sequences(p.seq_dir, p.sample, alnasmv, pass, prim)
     end
 
-    open(joinpath(tmp_dir, "internal.json"), "w") do io
+    open(GzipCompressorStream, joinpath(tmp_dir, "internal.jls.gz"), "w") do io
         serialize_alnasms(io, aln_asms, passes, isprimary)
     end
 

@@ -153,7 +153,7 @@ elif IS_NANOPORE:
         log: "tmp/log/fastp/{samplename}.log"
         threads: 2
         shell:
-            'fastp -i {input:p} -o {output.reads} --html {output.html} '
+            'fastp -i {input:q} -o {output.reads} --html {output.html} '
             '--json {output.json} --disable_adapter_trimming  --disable_trim_poly_g '
             '--cut_window_size 10 --cut_mean_quality 10 --cut_tail --cut_front --low_complexity_filter  '
             '--complexity_threshold 50 --length_limit 2400 --length_required 100 '

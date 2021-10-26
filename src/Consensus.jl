@@ -17,7 +17,7 @@ using Printf: @sprintf
 using Transducers: Map
 using Folds: Folds
 using Plots: Plots
-using CodecZlib: GzipDecompressorStream
+using CodecZlib: GzipDecompressorStream, GzipCompressorStream
 using Serialization: serialize
 using JSON3: JSON3
 
