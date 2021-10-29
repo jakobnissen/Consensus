@@ -2,9 +2,8 @@ function load_aligned_assemblies(
     paths::Vector{String},
     samples::Vector{Sample},
     jsonpath::AbstractString,
-    is_kma::Bool,
 )::Vector{Vector{AlignedAssembly}}
-    asms = map(path -> load_assembly(path, is_kma), paths)
+    asms = map(path -> load_assembly(path), paths)
     refs = find_references(asms, jsonpath)
     zip(asms, refs, samples) |> Map() do (asmv, refv, sample)
         map(collect(zip(asmv, refv))) do (asm, ref)
@@ -15,32 +14,12 @@ function load_aligned_assemblies(
     end |> Folds.collect
 end
 
-function load_assembly(path::AbstractString, kma::Bool)::Vector{Assembly}
+function load_assembly(path::AbstractString)::Vector{Assembly}
     map(open(collect, FASTA.Reader, path)) do record
         temp_asm = Assembly(record, nothing)
-        (accession, segment) = let
-            if kma
-                split_segment(temp_asm.name)
-            else
-                s = try_parse_medaka_header(temp_asm.name)
-                if s === nothing
-                    error("In $path, found header \"$(temp_asm.name)\", expected pattern \"HEADER_SEGMENT_segment0 HEADER_SEGMENT[stuff]\"")
-                else
-                    s
-                end
-            end
-        end
+        (accession, segment) = split_segment(temp_asm.name)
         Assembly(accession, temp_asm.seq, some(segment), temp_asm.insignificant)
     end
-end
-
-function try_parse_medaka_header(s::Union{String, SubString{String}})
-    ps = findall("_segment0", s)
-    # if _segment0 is contained in the header N times, it will appear 2N+1 times total.
-    isodd(length(isempty(ps))) || return nothing
-    underscore_pos = first(ps[cld(length(ps), 2)])
-    stripped_header = SubString(s, 1:prevind(s, underscore_pos))
-    return try_parseout_suffix(Segment, stripped_header, '_')
 end
 
 function find_references(

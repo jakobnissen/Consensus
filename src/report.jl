@@ -1,10 +1,11 @@
-function illumina_snakemake_entrypoint(
+function snakemake_entrypoint(
     report_path::AbstractString, # output report
     ref_dir::AbstractString, # dir of .fna + .json ref files
-    aln_dir::AbstractString, # dir of medaka / kma aln
+    aln_dir::AbstractString, # dir of kma aln
     seq_dir::AbstractString,
     depths_plot_dir::AbstractString,
-    tmp_dir::AbstractString
+    tmp_dir::AbstractString,
+    is_illumina::Bool,
 )::Nothing
     samples = map(Sample, sort!(readdir(aln_dir)))
     paths = map(samples) do sample
@@ -25,8 +26,7 @@ function illumina_snakemake_entrypoint(
     aln_asms = load_aligned_assemblies(
         [s.asm for s in paths],
         [s.sample for s in paths],
-        joinpath(ref_dir, "refs.json"),
-        true
+        joinpath(ref_dir, "refs.json")
     )
     foreach(zip(aln_asms, paths)) do (alnasmv, path)
         kma2_identity_check(alnasmv, path.res)
@@ -41,58 +41,7 @@ function illumina_snakemake_entrypoint(
         plot_depths(path.t_plot, path.a_plot, v)
     end
 
-    passes = report(report_path, samples, isprimary, aln_asms, depths, read_stats)
-
-    for (p, alnasmv, pass, prim) in zip(paths, aln_asms, passes, isprimary)
-        write_sequences(p.seq_dir, p.sample, alnasmv, pass, prim)
-    end
-
-    open(GzipCompressorStream, joinpath(tmp_dir, "internal.jls.gz"), "w") do io
-        serialize_alnasms(io, aln_asms, passes, isprimary)
-    end
-
-    return nothing
-end
-
-function nanopore_snakemake_entrypoint(
-    report_path::AbstractString, # output report
-    ref_dir::AbstractString, # dir of .fna + .json ref files
-    aln_dir::AbstractString, # dir of medaka / kma aln
-    seq_dir::AbstractString,
-    depths_plot_dir::AbstractString,
-    tmp_dir::AbstractString
-)::Nothing
-    samples = map(Sample, sort!(readdir(aln_dir)))
-    paths = map(samples) do sample
-        name = nameof(sample)
-        (;
-            sample=sample,
-            fastp=joinpath(tmp_dir, "trim", name, "report.json"),
-            asm=joinpath(aln_dir, name, "medaka", "consensus.fasta"),
-            t_depth=joinpath(aln_dir, name, "kma1.mat.gz"),
-            t_plot=joinpath(depths_plot_dir, name * "_template.pdf"),
-            seq_dir=joinpath(seq_dir, name)
-        )
-    end
-    read_stats = map(p -> check_reads(p.fastp), paths)
-    aln_asms = load_aligned_assemblies(
-        [s.asm for s in paths],
-        [s.sample for s in paths],
-        joinpath(ref_dir, "refs.json"),
-        false
-    )
-
-    depths = map(zip(aln_asms, paths)) do (alnasmv, path)
-        load_depths_and_errors(alnasmv, path.t_depth)
-    end
-    isprimary = map(i -> get_primary(i...), zip(aln_asms, depths))
-    
-    for (pr, path, de, alnasmv) in zip(isprimary, paths, depths, aln_asms)
-        v = [(alnasmv[i].reference.segment, de[i]) for i in eachindex(de, alnasmv, pr) if pr[i]]
-        plot_depths(path.t_plot, path.t_plot, v)
-    end
-
-    passes = report(report_path, samples, isprimary, aln_asms, depths, read_stats)
+    passes = report(report_path, samples, isprimary, aln_asms, depths, read_stats, is_illumina)
 
     for (p, alnasmv, pass, prim) in zip(paths, aln_asms, passes, isprimary)
         write_sequences(p.seq_dir, p.sample, alnasmv, pass, prim)
@@ -116,11 +65,12 @@ function report(
     alnasms::Vector{Vector{AlignedAssembly}},
     depths::Vector{Vector{Depths}},
     read_stats::Vector{<:ReadStats},
+    is_illumina::Bool,
 )::Vector{Vector{Bool}}
     result = Vector{Bool}[]
     open(report_path, "w") do io
         for i in eachindex(samples)
-            v = report(io, samples[i], isprimary[i], alnasms[i], depths[i], read_stats[i])
+            v = report(io, samples[i], isprimary[i], alnasms[i], depths[i], read_stats[i], is_illumina)
             push!(result, v)
         end
         print(io, '\n')
@@ -135,6 +85,7 @@ function report(
     alnasms::Vector{AlignedAssembly},
     depths::Vector{Depths},
     read_stats::ReadStats,
+    is_illumina::Bool,
 )::Vector{Bool}
     indexof = Dict(a => i for (i, a) in enumerate(alnasms))
     passes = fill(false, length(alnasms))
@@ -161,7 +112,7 @@ function report(
     # Primary segments report
     for (i, data) in enumerate(primary)
         segment = Segment(i - 1)
-        (buf, pass) = report_segment(data)
+        (buf, pass) = report_segment(data, is_illumina)
         if data !== nothing
             alnasm, _ = data
             passes[indexof[alnasm]] = pass
@@ -179,7 +130,7 @@ function report(
         println(io, "\t[ POSSIBLE SUPERINFECTION ]")
         for i in aux
             alnasm, depth = i
-            _, pass = report_segment(i)
+            _, pass = report_segment(i, is_illumina)
             segment = alnasm.reference.segment
             print(io,
                 "\t", pass ? "     " : "FAIL ",
@@ -195,7 +146,7 @@ function report(
 end
 
 function report_segment(
-    data::Union{Tuple{AlignedAssembly, Depths}, Nothing}
+    data::Union{Tuple{AlignedAssembly, Depths}, Nothing}, is_illumina::Bool
 )::Tuple{IOBuffer, Bool}
     buf = IOBuffer()
     passed = true
@@ -206,7 +157,7 @@ function report_segment(
     (alnasm, depth) = data
     print_segment_header(buf, alnasm, depth)
     for error in alnasm.errors
-        p = pass(error)
+        p = pass(error, is_illumina)
         println(buf, "\t\t", (p ? "      " : "ERROR "), error)
         passed &= p
     end
@@ -224,7 +175,7 @@ function report_segment(
         end
 
         for error in protein.errors
-            p = pass(error)
+            p = pass(error, is_illumina)
             println(buf, "\t\t", (p ? "      " : "ERROR "), protein.variant, ": ", error)
             passed &= (p || !is_important(protein.variant))
         end
@@ -238,13 +189,9 @@ function print_segment_header(io::IO, alnasm::AlignedAssembly, depth::Depths)
 end
 
 # fallback: segment errors fails
-pass(::Influenza.InfluenzaError) = false
-pass(x::Influenza.ErrorEarlyStop) = x.observed_naa + 14 > x.expected_naa
-pass(x::Influenza.ErrorInsignificant) = x.n_insignificant < 5
-pass(x::Influenza.ErrorAmbiguous) = x.n_ambiguous < 5
-pass(x::Influenza.ErrorLateStop) = true
-
-# Currently, we can't correctly estimate depths of Nanopore reads (see depths.jl file).
-# hence, to avoid getting too many false failures, we allow this error to pass through.
-# Too low depth will almost certainly be reflected in other errors anyway
-pass(x::Influenza.ErrorLowDepthBases) = true
+pass(::Influenza.InfluenzaError, is_illumina::Bool) = false
+pass(x::Influenza.ErrorEarlyStop, is_illumina::Bool) = x.observed_naa + 14 > x.expected_naa
+pass(x::Influenza.ErrorInsignificant, is_illumina::Bool) = x.n_insignificant < ifelse(is_illumina, 5, 25)
+pass(x::Influenza.ErrorAmbiguous, is_illumina::Bool) = x.n_ambiguous < ifelse(is_illumina, 5, 25)
+pass(x::Influenza.ErrorLateStop, is_illumina::Bool) = true
+pass(x::Influenza.ErrorLowDepthBases, is_illumina::Bool) = true

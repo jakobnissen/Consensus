@@ -21,9 +21,5 @@ if abspath(PROGRAM_FILE) == @__FILE__
     consdir = joinpath(outdir, "sequences")
     plotdir = joinpath(outdir, "depths")
     
-    if illumina
-        Consensus.illumina_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
-    else
-        Consensus.nanopore_snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir)
-    end
+    Consensus.snakemake_entrypoint(reportpath, refdir, alndir, consdir, plotdir, tmpdir, illumina)
 end

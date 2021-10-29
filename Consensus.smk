@@ -242,7 +242,7 @@ elif IS_NANOPORE:
         threads: 2
         shell:
             "kma -i {input.reads:q} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
+            "-mp 20 -bc 0.7 -t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
 
 # Both platforms
 # We need to map to multiple templates per segments to catch superinfections.
@@ -269,22 +269,21 @@ else
 fi
 """
 
-if IS_ILLUMINA:
-    # We now re-map to the created consensus sequence in order to accurately
-    # estimate depths and coverage, and get a more reliable assembly seq.
-    rule second_kma_index:
-        input: rules.remove_primers_dedup.output
-        output:
-            comp=temp("tmp/aln/{samplename}/cat.trimmed.comp.b"),
-            name=temp("tmp/aln/{samplename}/cat.trimmed.name"),
-            length=temp("tmp/aln/{samplename}/cat.trimmed.length.b"),
-            seq=temp("tmp/aln/{samplename}/cat.trimmed.seq.b")
-        params:
-            t_db="tmp/aln/{samplename}/cat.trimmed"
-        log: "tmp/log/aln/kma2_index_{samplename}.log"
-        shell: "kma index -nbp -i {input} -o {params.t_db} 2> {log}"
+# We now re-map to the created consensus sequence in order to accurately
+# estimate depths and coverage, and get a more reliable assembly seq.
+rule second_kma_index:
+    input: rules.remove_primers_dedup.output
+    output:
+        comp=temp("tmp/aln/{samplename}/cat.trimmed.comp.b"),
+        name=temp("tmp/aln/{samplename}/cat.trimmed.name"),
+        length=temp("tmp/aln/{samplename}/cat.trimmed.length.b"),
+        seq=temp("tmp/aln/{samplename}/cat.trimmed.seq.b")
+    params:
+        t_db="tmp/aln/{samplename}/cat.trimmed"
+    log: "tmp/log/aln/kma2_index_{samplename}.log"
+    shell: "kma index -nbp -k 12 -i {input} -o {params.t_db} 2> {log}"
 
-    # And now we KMA map to that index again
+if IS_ILLUMINA:
     rule second_kma_map:
         input:
             fw=rules.fastp.output.fw,
@@ -303,55 +302,40 @@ if IS_ILLUMINA:
             "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
             "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}"
 
-    rule create_report:
-        input:
-            matrix=expand("tmp/aln/{samplename}/kma1.mat.gz", samplename=SAMPLENAMES),
-            assembly=expand("tmp/aln/{samplename}/kma2.fsa", samplename=SAMPLENAMES),
-            res=expand("tmp/aln/{samplename}/kma2.res", samplename=SAMPLENAMES)
-        output:
-            consensus=expand("sequences/{samplename}/all.fna", samplename=SAMPLENAMES),
-            depth=expand("depths/{samplename}_template.pdf", samplename=SAMPLENAMES),
-            report="report_consensus.txt"
-        params:
-            juliacmd=JULIA_COMMAND,
-            scriptpath=f"{SNAKEDIR}/scripts/report.jl",
-            refdir=REFDIR
-        log: "tmp/log/report_consensus.txt"
-        threads: workflow.cores
-        shell: 
-            "{params.juliacmd} -t {threads} {params.scriptpath:q} "
-            "illumina . {params.refdir:q} > {log}"
-
 elif IS_NANOPORE:
-    rule medaka:
-        input: 
-            reads=rules.fastp.output.reads,
-            draft=rules.remove_primers_dedup.output
-        output: directory("tmp/aln/{samplename}/medaka")
-        log: "tmp/log/aln/medaka_{samplename}.log"
-        threads: 2
-        params:
-            model=lambda wc: "r941_min_high_g360" if PORE == 9 else "r103_min_high_g360"
-        shell:
-            "medaka_consensus -i {input.reads} -d {input.draft} -o {output} "
-            "-t {threads} -m {params.model} 2> {log}"
-
-    rule clean_medaka:
-        input: rules.medaka.output
-        output: touch("tmp/aln/{samplename}/moved.txt")
-        shell: "rm {input}/*.bam {input}/*.bai {input}/*.hdf"
-
-    rule create_report:
+    rule second_kma_map:
         input:
-            assembly=expand("tmp/aln/{samplename}/moved.txt", samplename=SAMPLENAMES),
+            reads=rules.fastp.output.reads,
+            index=rules.second_kma_index.output,
         output:
-            consensus=expand("sequences/{samplename}/all.fna", samplename=SAMPLENAMES),
-            depth=expand("depths/{samplename}_template.pdf", samplename=SAMPLENAMES),
-            report="report_consensus.txt"
+            res="tmp/aln/{samplename}/kma2.res",
+            fsa="tmp/aln/{samplename}/kma2.fsa",
+            mat="tmp/aln/{samplename}/kma2.mat.gz",
         params:
-            juliacmd=JULIA_COMMAND,
-            scriptpath=f"{SNAKEDIR}/scripts/report.jl",
-            refdir=REFDIR
-        log: "tmp/log/report_consensus.txt"
-        threads: workflow.cores
-        shell: "{params.juliacmd} -t {threads} {params.scriptpath:q} nanopore . {params.refdir:q} > {log}"
+            db="tmp/aln/{samplename}/cat.trimmed",
+            outbase="tmp/aln/{samplename}/kma2",
+        log: "tmp/log/aln/kma2_map_{samplename}.log"
+        threads: 2
+        shell:
+            "kma -i {input.reads:q} -o {params.outbase} -t_db {params.db} "
+            "-mp 20 -bc 0.7 -t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
+
+rule create_report:
+    input:
+        matrix=expand("tmp/aln/{samplename}/kma1.mat.gz", samplename=SAMPLENAMES),
+        assembly=expand("tmp/aln/{samplename}/kma2.fsa", samplename=SAMPLENAMES),
+        res=expand("tmp/aln/{samplename}/kma2.res", samplename=SAMPLENAMES)
+    output:
+        consensus=expand("sequences/{samplename}/all.fna", samplename=SAMPLENAMES),
+        depth=expand("depths/{samplename}_template.pdf", samplename=SAMPLENAMES),
+        report="report_consensus.txt"
+    params:
+        juliacmd=JULIA_COMMAND,
+        scriptpath=f"{SNAKEDIR}/scripts/report.jl",
+        refdir=REFDIR,
+        platform='illumina' if IS_ILLUMINA else 'nanopore'
+    log: "tmp/log/report_consensus.txt"
+    threads: workflow.cores
+    shell: 
+        "{params.juliacmd} -t {threads} {params.scriptpath:q} "
+        "{params.platform} . {params.refdir:q} > {log}"
