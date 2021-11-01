@@ -34,21 +34,21 @@ function snakemake_entrypoint(
     depths = map(zip(aln_asms, paths)) do (alnasmv, path)
         load_depths_and_errors(alnasmv, path.t_depth, path.a_depth)
     end
-    isprimary = map(i -> get_primary(i...), zip(aln_asms, depths))
+    segmentorder = map(i -> order_alnasms(i...), zip(aln_asms, depths))
     
-    for (pr, path, de, alnasmv) in zip(isprimary, paths, depths, aln_asms)
-        v = [(alnasmv[i].reference.segment, de[i]) for i in eachindex(de, alnasmv, pr) if pr[i]]
+    for (sorder, path, de, alnasmv) in zip(segmentorder, paths, depths, aln_asms)
+        v = [(alnasmv[i].reference.segment, de[i]) for i in eachindex(de, alnasmv, sorder) if sorder[i] == 1]
         plot_depths(path.t_plot, path.a_plot, v)
     end
 
-    passes = report(report_path, samples, isprimary, aln_asms, depths, read_stats, is_illumina)
+    passes = report(report_path, samples, segmentorder, aln_asms, depths, read_stats, is_illumina)
 
-    for (p, alnasmv, pass, prim) in zip(paths, aln_asms, passes, isprimary)
-        write_sequences(p.seq_dir, p.sample, alnasmv, pass, prim)
+    for (p, alnasmv, pass, sorder) in zip(paths, aln_asms, passes, segmentorder)
+        write_sequences(p.seq_dir, p.sample, alnasmv, pass, sorder)
     end
 
     open(GzipCompressorStream, joinpath(tmp_dir, "internal.jls.gz"), "w") do io
-        serialize_alnasms(io, aln_asms, passes, isprimary)
+        serialize_alnasms(io, aln_asms, passes, segmentorder)
     end
 
     return nothing
@@ -61,7 +61,7 @@ end
 function report(
     report_path::AbstractString,
     samples::Vector{Sample},
-    isprimary::Vector{Vector{Bool}},
+    order::Vector{Vector{UInt8}},
     alnasms::Vector{Vector{AlignedAssembly}},
     depths::Vector{Vector{Depths}},
     read_stats::Vector{<:ReadStats},
@@ -70,7 +70,7 @@ function report(
     result = Vector{Bool}[]
     open(report_path, "w") do io
         for i in eachindex(samples)
-            v = report(io, samples[i], isprimary[i], alnasms[i], depths[i], read_stats[i], is_illumina)
+            v = report(io, samples[i], order[i], alnasms[i], depths[i], read_stats[i], is_illumina)
             push!(result, v)
         end
         print(io, '\n')
@@ -81,7 +81,7 @@ end
 function report(
     io::IO,
     sample::Sample,
-    isprimary::Vector{Bool},
+    order::Vector{UInt8},
     alnasms::Vector{AlignedAssembly},
     depths::Vector{Depths},
     read_stats::ReadStats,
@@ -92,15 +92,15 @@ function report(
 
     primary = Vector{Union{Tuple{AlignedAssembly, Depths}, Nothing}}(undef, N_SEGMENTS)
     fill!(primary, nothing)
-    aux = Tuple{AlignedAssembly, Depths}[]
-    for i in eachindex(alnasms, depths, isprimary)
-        a, d, p = alnasms[i], depths[i], isprimary[i]
+    aux = Tuple{AlignedAssembly, Depths, UInt8}[]
+    for i in eachindex(alnasms, depths, order)
+        a, d, o = alnasms[i], depths[i], order[i]
         segment = a.reference.segment
         index = Integer(segment) + 0x01
-        if p
+        if o == 1
             primary[index] = (a, d)
         else
-            push!(aux, (a, d))
+            push!(aux, (a, d, o))
         end
     end
     sort!(aux, by=i -> first(i).reference.segment)
@@ -129,12 +129,12 @@ function report(
         println(io, "")
         println(io, "\t[ POSSIBLE SUPERINFECTION ]")
         for i in aux
-            alnasm, depth = i
-            _, pass = report_segment(i, is_illumina)
+            alnasm, depth, order = i
+            _, pass = report_segment((alnasm, depth), is_illumina)
             segment = alnasm.reference.segment
             print(io,
                 "\t", pass ? "     " : "FAIL ",
-                rpad(string(segment) * ":", 4)
+                rpad(string(segment), 3) * ' ' * string(order) * ':'
             )
             print_segment_header(io, alnasm, depth)
             passes[indexof[alnasm]] = pass

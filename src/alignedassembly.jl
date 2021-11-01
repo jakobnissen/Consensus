@@ -85,26 +85,30 @@ function write_sequences(
     sample::Sample,
     alnasms::Vector{AlignedAssembly},
     passed::Vector{Bool},
-    primary::Vector{Bool}
+    order::Vector{UInt8}
 )
     isdir(seq_dir_name) || mkpath(seq_dir_name)
     file_contents = Dict{String, Vector{FASTA.Record}}()
-    for i in eachindex(alnasms, passed, primary)
+    for i in eachindex(alnasms, passed, order)
         alnasm = alnasms[i]
         asm = alnasm.assembly
         segment = alnasm.reference.segment
         samplename = nameof(sample)
+        ord = order[i]
+        primary = ord == 1
 
         # All DNA
         dnastr = dna_str(asm.seq, asm.insignificant)
-        primstr = primary[i] ? "primary" : "secondary"
-        rec = FASTA.Record("$(samplename)_$(segment)_$(primstr)", dnastr)
+        sec_header = "$(samplename)_$(segment)_$(ord)"
+        prim_header = "$(samplename)_$(segment)"
+        rec = FASTA.Record(sec_header, dnastr)
         push!(get!(valtype(file_contents), file_contents, "all.fna"), rec)
 
         # Primary / secondary DNA
         if passed[i]
-            filename = primary[i] ? "primary.fna" : "secondary.fna"
-            rec = FASTA.Record("$(samplename)_$(segment)", dnastr)
+            filename = primary ? "primary.fna" : "secondary.fna"
+            header = primary ? prim_header : sec_header
+            rec = FASTA.Record(header, dnastr)
             push!(get!(valtype(file_contents), file_contents, filename), rec)
         end
 
@@ -115,11 +119,14 @@ function write_sequences(
             aaseq = @unwrap_or m_aaseq continue
             id = "$(samplename)_$(protein.variant)"
             orfstr = join(["$(first(i))-$(last(i))" for i in orfs], ',')
-            rec = FASTA.Record("$(id)_$(primstr)_$(orfstr)", aaseq)
+            sec_header = "$(id)_$(ord)_$(orfstr)"
+            prim_header = "$(id)_$(ord)_$(orfstr)"
+            rec = FASTA.Record(sec_header, aaseq)
             push!(get!(valtype(file_contents), file_contents, "all.faa"), rec)
             if passed[i]
-                filename = primary[i] ? "primary.faa" : "secondary.faa"
-                rec = FASTA.Record("$(id)_$(orfstr)", aaseq)
+                filename = primary ? "primary.faa" : "secondary.faa"
+                header = primary ? prim_header : sec_header
+                rec = FASTA.Record(header, aaseq)
                 push!(get!(valtype(file_contents), file_contents, filename), rec)
             end
         end

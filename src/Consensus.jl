@@ -42,10 +42,10 @@ function serialize_alnasms(
     io::IO,
     alnasms::Vector{Vector{AlignedAssembly}},
     passes::Vector{Vector{Bool}},
-    isprimary::Vector{Vector{Bool}},
+    order::Vector{Vector{UInt8}},
 )
-    v = map(zip(alnasms, passes, isprimary)) do (a, p, i)
-        collect(zip(a, p, i))
+    v = map(zip(alnasms, passes, order)) do (a, p, o)
+        collect(zip(a, p, o))
     end
     serialize(io, v)
 end

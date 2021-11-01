@@ -121,21 +121,26 @@ function add_depths_errors!(
     return nothing
 end
 
-function get_primary(
+"Each instance of a segment is ordered from 1 (primary) to N,
+in order to be able to refer to e.g. PB1 # 2 unambiguously."
+function order_alnasms(
     alnasms::Vector{AlignedAssembly},
     depths::Vector{Depths}
-)::Vector{Bool}
-    primary = Dict{Segment, Depths}()
-    max_depth = Dict(s => 0.0 for s in instances(Segment))
-    for (d, a) in zip(depths, alnasms)
-        segment = a.reference.segment
-        mean = assembly_depth(d)
-        if mean > max_depth[segment]
-            max_depth[segment] = mean
-            primary[segment] = d
+)::Vector{UInt8}
+    bysegment = Dict{Segment, Vector{Tuple{AlignedAssembly, Depths}}}()
+    for i in eachindex(alnasms, depths)
+        seg = alnasms[i].reference.segment
+        push!(get!(valtype(bysegment), bysegment, seg), (alnasms[i], depths[i]))
+    end
+    result = zeros(UInt8, length(alnasms))
+    indexof = Dict(a => i for (i, a) in enumerate(alnasms))
+    for (_, v) in bysegment
+        sort!(v, rev=true, by=i->assembly_depth(last(i)))
+        for (i, (alnasm, _)) in enumerate(v)
+            result[indexof[alnasm]] = i
         end
     end
-    [d === primary[a.reference.segment] for (d,a) in zip(depths, alnasms)]
+    return result
 end
 
 function plot_depths(
