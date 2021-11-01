@@ -185,7 +185,7 @@ end
 
 function print_segment_header(io::IO, alnasm::AlignedAssembly, depth::Depths)
     print(io, " Identity $(@sprintf "%.3f" (alnasm.identity)),")
-    println(io, " depth $(@sprintf "%.2e" mean_depth(depth)), coverage $(@sprintf "%.3f" coverage(depth))")
+    println(io, " depth $(@sprintf "%.2e" assembly_depth(depth)), coverage $(@sprintf "%.3f" template_coverage(depth))")
 end
 
 # fallback: segment errors fails

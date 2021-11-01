@@ -3,9 +3,7 @@
 # The former is relevant for knowing if the template is closely enough related. This can
 # be measured by mapping to the template.
 # The latter for knowing if the assembly went well. This can only truly be measured by
-# mapping to the assembly - but we don't do that for Nanopore reads, and Medaka doesn't
-# give us any good way of measuring depth over the assembly. So we use the template depth
-# to estimate the assembly depth.
+# mapping to the assembly.
 
 struct Depths
     # Depth of bases of the template, as given by the initial mapping against it
@@ -14,14 +12,15 @@ struct Depths
     # Depth of bases across the assembly, including any inserted bases and not
     # including deleted bases
     assembly_depths::Vector{UInt32}
-
-    # Mark whether the assembly depths are correctly calculated from the depths
-    # over the final assembly, instead of estimated from mapping to the template
-    dedicated_assembly::Bool
 end
 
-coverage(d::Depths) = count(!iszero, d.template_depths) / length(d.template_depths)
-mean_depth(d::Depths) = sum(d.assembly_depths) / length(d.assembly_depths)
+_coverage(v::Vector{<:Unsigned}) = count(!iszero, v) / length(v)
+_mean_depth(v::Vector{<:Unsigned}) = sum(v) / length(v)
+
+template_coverage(d::Depths) = _coverage(d.template_depths)
+assembly_coverage(d::Depths) = _coverage(d.assembly_depths)
+template_depth(d::Depths) = _mean_depth(d.template_depths)
+assembly_depth(d::Depths) = _mean_depth(d.assembly_depths)
 
 # This is the type KMATools parses the mat file into
 const KMARowType = Tuple{DNA, NTuple{6, UInt32}}
@@ -46,77 +45,57 @@ function Depths(template_mapping::Vector{KMARowType}, assembly_mapping::Vector{K
         end
     end
 
-    return Depths(template_depths, assembly_depths, template_mapping !== assembly_mapping)
+    return Depths(template_depths, assembly_depths)
 end
 
-function load_depths_and_errors(alnasms::Vector{AlignedAssembly}, args...)::Vector{Depths}
-    depths = load_depths(alnasms, args...)
-    for (alnasm, depth) in zip(alnasms, depths)
+function load_depths_and_errors(
+    alnasms::Vector{AlignedAssembly},
+    template_mat_path::AbstractString,
+    assembly_mat_path::AbstractString
+)::Vector{Depths}
+    alnasm_by_header = Dict((a.assembly.name, a.reference.segment) => a for a in alnasms)
+    @assert length(alnasm_by_header) == length(alnasms)
+    depths = load_depths(template_mat_path, assembly_mat_path)
+    for (k, depth) in depths
+        alnasm = alnasm_by_header[k]
         add_depths_errors!(alnasm, depth)
     end
-    return depths
+    return map(last, depths)
 end
 
-# Single-depthspath method, for approximating assembly-level mapping
 function load_depths(
-    alnasms::Vector{AlignedAssembly},
-    tdepths::String
-)::Vector{Depths}
-    map(load_depths_from_mat(alnasms, tdepths)) do rows
-        Depths(rows, rows)
+    template_mat_path::AbstractString,
+    assembly_mat_path::AbstractString
+)::Vector{Tuple{Tuple{String, Segment}, Depths}}
+    tmat = open(GzipDecompressorStream, template_mat_path) do io
+        KMATools.parse_mat(io, template_mat_path)
     end
+    amat = open(GzipDecompressorStream, assembly_mat_path) do io
+        KMATools.parse_mat(io, assembly_mat_path)
+    end
+    load_depths(tmat, amat)
 end
 
-# Same signature as above, except depthspaths are pairs of strings,
-# first for template mapping, second for assembly mapping
 function load_depths(
-    alnasms::Vector{AlignedAssembly},
-    tdepths::String,
-    adepths::String
-)::Vector{Depths}
-    trows = load_depths_from_mat(alnasms, tdepths)
-    arows = load_depths_from_mat(alnasms, adepths)
-    map(i -> Depths(i...), zip(trows, arows))
-end
-
-function get_primary(
-    alnasms::Vector{AlignedAssembly},
-    depths::Vector{Depths}
-)::Vector{Bool}
-    primary = Dict{Segment, Depths}()
-    max_depth = Dict(s => 0.0 for s in instances(Segment))
-    for (d, a) in zip(depths, alnasms)
-        segment = a.reference.segment
-        mean = mean_depth(d)
-        if mean > max_depth[segment]
-            max_depth[segment] = mean
-            primary[segment] = d
-        end
+    template_mapping::MatType,
+    assembly_mapping::MatType
+)::Vector{Tuple{Tuple{String, Segment}, Depths}}
+    # The assembly mapping is done through iterative mapping based on the template
+    # mapping, so all segments present in the former must be in the latter, but
+    # not necessarily vice versa
+    asm_headers = Set(first(i) for i in assembly_mapping)
+    temp_headers = Set(first(i) for i in template_mapping)
+    if !issubset(asm_headers, temp_headers)
+        miss = first(setdiff(asm_headers, temp_headers))
+        error("Missing header from template mapping in \"$(template_mapping)\": \"$(miss)\"")
     end
-    [d === primary[a.reference.segment] for (d,a) in zip(depths, alnasms)]
-end
-
-function load_depths_from_mat(
-    alnasms::Vector{AlignedAssembly},
-    path::String
-)::Vector{Vector{KMARowType}}
-    indexof = Dict(
-        (a.assembly.name, a.reference.segment) => i
-        for (i, a) in enumerate(alnasms)
-    )
-    data = open(GzipDecompressorStream, path) do io
-        KMATools.parse_mat(io, path)
+    template_by_header = Dict{String, Vector{KMARowType}}()
+    for (header, rows) in template_mapping
+        template_by_header[header] = rows
     end
-    # There are some segments in kma1.mat.gz which has been removed in
-    # earlier states of the pipeline.
-    # We set an index of nothing for those, then filter them away
-    withindex = map(data) do (header, rows)
-        key = split_segment(strip(header))
-        (get(indexof, key, nothing), rows)
+    map(assembly_mapping) do (header, rows)
+        (split_segment(header), Depths(template_by_header[header], rows))
     end
-    filter!(i -> first(i) !== nothing, withindex)
-    @assert length(withindex) == length(alnasms)
-    map(last, sort!(withindex, by=first))
 end
 
 function add_depths_errors!(
@@ -129,7 +108,7 @@ function add_depths_errors!(
     end
 
     # Too low coverage relative to template
-    cov = coverage(depth)
+    cov = template_coverage(depth)
     if cov < 0.9
         push!(alnasm.errors, Influenza.ErrorLowCoverage(cov))
     end
@@ -142,15 +121,30 @@ function add_depths_errors!(
     return nothing
 end
 
+function get_primary(
+    alnasms::Vector{AlignedAssembly},
+    depths::Vector{Depths}
+)::Vector{Bool}
+    primary = Dict{Segment, Depths}()
+    max_depth = Dict(s => 0.0 for s in instances(Segment))
+    for (d, a) in zip(depths, alnasms)
+        segment = a.reference.segment
+        mean = assembly_depth(d)
+        if mean > max_depth[segment]
+            max_depth[segment] = mean
+            primary[segment] = d
+        end
+    end
+    [d === primary[a.reference.segment] for (d,a) in zip(depths, alnasms)]
+end
+
 function plot_depths(
     template_path::String,
     assembly_path::String,
     v::Vector{Tuple{Segment, Depths}}
 )::Nothing
     Plots.savefig(make_depth_plot([(s, d.template_depths) for (s, d) in v]), template_path)
-    if isempty(v) || first(v)[2].dedicated_assembly
-        Plots.savefig(make_depth_plot([(s, d.assembly_depths) for (s, d) in v]), assembly_path)
-    end
+    Plots.savefig(make_depth_plot([(s, d.assembly_depths) for (s, d) in v]), assembly_path)
     return nothing
 end
 
