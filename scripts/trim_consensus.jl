@@ -3,11 +3,7 @@
 
 using FASTX: FASTA
 using BioSequences: NucleotideSeq, LongDNASeq, reverse_complement, iscompatible
-using Influenza: Influenza, Segment
 using FluWorkflowTools: split_segment
-using BioAlignments: BioAlignments
-
-const BA = BioAlignments
 
 function is_possibility(needle::NucleotideSeq, haystack::NucleotideSeq, maxerrs::Int)
     errs = 0

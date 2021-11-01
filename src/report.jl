@@ -14,7 +14,7 @@ function snakemake_entrypoint(
             sample=sample,
             fastp=joinpath(tmp_dir, "trim", name, "report.json"),
             asm=joinpath(aln_dir, name, "kma_final.fsa"),
-            res=joinpath(aln_dir, name, "kma_final.res"),
+            convergence=joinpath(aln_dir, name, "convergence.tsv"),
             t_depth=joinpath(aln_dir, name, "kma_1.mat.gz"),
             a_depth=joinpath(aln_dir, name, "kma_final.mat.gz"),
             t_plot=joinpath(depths_plot_dir, name * "_template.pdf"),
@@ -29,7 +29,7 @@ function snakemake_entrypoint(
         joinpath(ref_dir, "refs.json")
     )
     foreach(zip(aln_asms, paths)) do (alnasmv, path)
-        kma2_identity_check(alnasmv, path.res)
+        convergence_check(alnasmv, path.convergence)
     end
     depths = map(zip(aln_asms, paths)) do (alnasmv, path)
         load_depths_and_errors(alnasmv, path.t_depth, path.a_depth)

@@ -44,6 +44,8 @@ function main(
     iter = 1
     dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
     assemblies = deduplicate_and_save(parse_fna(asm_path, res_path), dedup_path)
+    local mapbase
+    local convergence
     iter += 1
     while true
         # Index
@@ -71,17 +73,32 @@ function main(
         println(stderr, "Existing:", "\n\t", join(("$(a.name) $(a.identity)" for a in assemblies), "\n\t"))
 
         # Break if possible
-        if has_conveged(assemblies, convergence_threshold) || iter == MAX_ITERS
+        is_converged, convergence = has_conveged(assemblies, convergence_threshold)
+        if is_converged || iter == MAX_ITERS
             break
         end
 
         iter += 1
     end
 
-    # Finally, rename the last one to "final"
-    for ext in (".aln", ".fsa", ".mat.gz", ".res")
-        mv(joinpath(outdir, "kma_$(iter)$(ext)"), joinpath(outdir, "kma_final$(ext)"))
+    # Write convergence report
+    open(joinpath(outdir, "convergence.tsv"), "w") do io
+        println(io, "template\tsegment\tisconverged\tid")
+        for i in convergence
+            println(io,
+                i.template, '\t',
+                i.segment, '\t',
+                i.isconverged, '\t',
+                round(i.identity, digits=4)
+            )
+        end
     end
+
+    # Finally, rename the last one to "final"
+    for ext in (".aln", ".mat.gz", ".res")
+        mv(mapbase * ext, joinpath(outdir, "kma_final$(ext)"))
+    end
+    mv(dedup_path, joinpath(outdir, "kma_final.fsa"))
 
     return nothing
 end
@@ -122,7 +139,7 @@ end
 function deduplicate_and_save(asms::Vector{Assembly}, path::AbstractString)::Vector{Assembly}
     next = deduplicate(asms)
     open(FASTA.Writer, path) do writer
-        foreach(a -> write(writer, FASTA.Record(a)), asms)
+        foreach(a -> write(writer, FASTA.Record(a)), next)
     end
     return next
 end
@@ -171,10 +188,23 @@ function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
 
     aln = alignment(pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL))
     id = alignment_identity(OverlapAlignment(), aln)
+
+    # If the more common has > 100x the depth of the minor variant, I don't trust it
+    # maybe this criteria is silly, but I think a 100x more abundant variant will
+    # completely dominate the smaller virus in the sense that there may be as many
+    # mismapped reads from the more abundant one as properly low-abundance reads
+    bigdepth, smalldepth = minmax(a.depth, b.depth)
+    if bigdepth / smalldepth > 100
+        return a.depth < b.depth ? b : a
+    end
+
+    # Else if they are too different, neither one is best
     if isnothing(id) || id < 0.98 # this is sort of arbitrary, maybe it should be a parameter
         return nothing
     end
 
+    # Else, we simply pick the most abundant one since that will probably win
+    # out the consensus sequence generation anyway through majority vote
     return a.depth < b.depth ? b : a
 end
 
@@ -196,10 +226,16 @@ function parse_fna(fsa_path::AbstractString, res_path::AbstractString)::Vector{A
     end
 end
 
-function has_conveged(assemblies::Vector{Assembly}, convergence_threshold)::Bool
-    all(assemblies) do assembly
-        assembly.identity ≥ convergence_threshold
+function has_conveged(assemblies::Vector{Assembly}, convergence_threshold)
+    convergence = map(assemblies) do assembly
+        template = assembly.name
+        isconverged = assembly.identity ≥ convergence_threshold
+        identity = assembly.identity
+        segment = assembly.segment
+        (; template, segment, isconverged, identity)
     end
+    isconverged = all(i -> i.isconverged, convergence)
+    return (isconverged, convergence)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

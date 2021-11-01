@@ -256,7 +256,8 @@ rule iterative_assembly:
     output:
         asm="tmp/aln/{samplename}/kma_final.fsa",
         res="tmp/aln/{samplename}/kma_final.res",
-        mat="tmp/aln/{samplename}/kma_final.mat.gz"
+        mat="tmp/aln/{samplename}/kma_final.mat.gz",
+        conv="tmp/aln/{samplename}/convergence.tsv"
     log: "tmp/log/aln/{samplename}/iterative.log"
     threads: 2
     params:

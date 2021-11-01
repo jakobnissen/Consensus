@@ -58,31 +58,24 @@ function add_alnasm_errors!(alnasm::AlignedAssembly)
     return nothing
 end
 
-# Add error to aligned assembly if kma2.res does not show they
-# have converged
-function kma2_identity_check(
-    alnasms::Vector{AlignedAssembly},
-    respath::String
-)::Nothing
-    res = open(respath) do io
-        KMATools.parse_res(io, respath)
-    end
-    byid = Dict{String, AlignedAssembly}()
+# Add error to aligned assembly if the convergence report show some segments
+# have not converged
+function convergence_check(alnasms::Vector{AlignedAssembly}, convpath::String)
+    byid = Dict{Tuple{String, Segment}, AlignedAssembly}()
     for alnasm in alnasms
         @assert !haskey(byid, alnasm.reference.name) # for safety
-        byid[alnasm.reference.name] = alnasm
+        byid[(alnasm.reference.name, alnasm.reference.segment)] = alnasm
     end
-    for row in res
-        identifier, _ = split_segment(strip(row.template))
-        alnasm = byid[identifier]
-
-        # Identity can be low either due to low template id or low query id
-        # these may differ due to indels. We take the minimum of these.
-        # Strictly speaking, this means an N nt insersion in template plus an
-        # N nt deletion would only count as N differences, but it's OK here.
-        id = min(row.tid, row.qid)
-        if id < 0.995
-            push!(alnasm.errors, Influenza.ErrorAssemblyNotConverged(id))
+    open(convpath) do io
+        header = readline(io)
+        @assert strip(header) == "template\tsegment\tisconverged\tid"
+        for row in eachline(io)
+            identifier, segment, isconverged_, id_ = split(row, '\t')
+            alnasm = byid[(identifier, parse(Segment, segment))]
+            if !(parse(Bool, isconverged_))
+                id = parse(Float64, id_)
+                push!(alnasm.errors, Influenza.ErrorAssemblyNotConverged(id))
+            end
         end
     end
 end
