@@ -104,8 +104,6 @@ rule index_ref:
 # CONSENSUS PART OF PIPELINE
 ############################
 if IS_ILLUMINA:
-    ruleorder: second_kma_map > first_kma_map
-
     rule fastp:
         input:
             fw=lambda wildcards: READS[wildcards.samplename][0],
@@ -214,12 +212,12 @@ if IS_ILLUMINA:
             rv=rules.fastp.output.rv,
             index=rules.first_kma_index.output,
         output:
-            res="tmp/aln/{samplename}/kma1.res",
-            fsa="tmp/aln/{samplename}/kma1.fsa",
-            mat="tmp/aln/{samplename}/kma1.mat.gz",
+            res="tmp/aln/{samplename}/kma_1.res",
+            fsa="tmp/aln/{samplename}/kma_1.fsa",
+            mat="tmp/aln/{samplename}/kma_1.mat.gz",
         params:
             db="tmp/aln/{samplename}/cat",
-            outbase="tmp/aln/{samplename}/kma1",
+            outbase="tmp/aln/{samplename}/kma_1",
         log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
         shell:
@@ -232,99 +230,74 @@ elif IS_NANOPORE:
             reads=rules.fastp.output.reads,
             index=rules.first_kma_index.output,
         output:
-            res="tmp/aln/{samplename}/kma1.res",
-            fsa="tmp/aln/{samplename}/kma1.fsa",
-            mat="tmp/aln/{samplename}/kma1.mat.gz",
+            res="tmp/aln/{samplename}/kma_1.res",
+            fsa="tmp/aln/{samplename}/kma_1.fsa",
+            mat="tmp/aln/{samplename}/kma_1.mat.gz",
         params:
             db="tmp/aln/{samplename}/cat",
-            outbase="tmp/aln/{samplename}/kma1",
+            outbase="tmp/aln/{samplename}/kma_1",
         log: "tmp/log/aln/kma1_map_{samplename}.log"
         threads: 2
         shell:
             "kma -i {input.reads:q} -o {params.outbase} -t_db {params.db} "
             "-mp 20 -bc 0.7 -t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
 
+def iterative_reads(wc):
+    if IS_ILLUMINA:
+        return [f'tmp/trim/{wc.samplename}/fw.fq', f'tmp/trim/{wc.samplename}/rv.fq']
+    else:
+        return f'tmp/trim/{wc.samplename}/reads.fq'
+
+rule iterative_assembly:
+    input:
+        reads=rules.fastp.output,
+        asm=rules.first_kma_map.output.fsa,
+        res=rules.first_kma_map.output.res
+    output:
+        asm="tmp/aln/{samplename}/kma_final.fsa",
+        res="tmp/aln/{samplename}/kma_final.res",
+        mat="tmp/aln/{samplename}/kma_final.mat.gz"
+    log: "tmp/log/aln/{samplename}/iterative.log"
+    threads: 2
+    params:
+        juliacmd=JULIA_COMMAND,
+        scriptpath=f"{SNAKEDIR}/scripts/iter_asm.jl",
+        samplename=lambda wc: wc.samplename,
+        outdir=lambda wc: f"tmp/aln/{wc.samplename}",
+        logdir=lambda wc: f"tmp/log/aln/{wc.samplename}",
+        k=12,
+        threshold=0.995 if IS_ILLUMINA else 0.985,
+        reads=iterative_reads
+    shell:
+        "{params.juliacmd} -t {threads} {params.scriptpath:q} "
+        "{params.samplename} {input.asm} {input.res} {params.outdir} "
+        "{params.logdir} {params.k} {params.threshold} {params.reads} 2> {log}"
+
 # Both platforms
 # We need to map to multiple templates per segments to catch superinfections.
 # but I haven't nailed down the heuristics for in gather_res.jl for detecting
 # superinfections. If they are not truly present, the multiple assemblies will
 # quickly converge. We trim primers here and remove converged assemblies
-rule remove_primers_dedup:
+rule remove_primers:
     input:
-        con=rules.first_kma_map.output.fsa,
+        con=rules.iterative_assembly.output.asm,
         primers=f"{REFDIR}/primers.fna"
-    output: temp("tmp/aln/{samplename}/cat.trimmed.fna")
+    output: temp("tmp/aln/{samplename}/assembly.fna")
     log: "tmp/log/consensus/remove_primers_{samplename}.txt"
     params:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/trim_consensus.jl",
         minmatches=4,
-        fuzzylen=8,
-        id=0.95,
-    shell: """if [ -s {input.primers} ]; then
-    {params.juliacmd} {params.scriptpath:q} {input.primers:q} \
-{input.con} {output} {params.minmatches} {params.fuzzylen} {params.id} > {log}
-else
-    cp {input.con} {output}
-fi
-"""
-
-# We now re-map to the created consensus sequence in order to accurately
-# estimate depths and coverage, and get a more reliable assembly seq.
-rule second_kma_index:
-    input: rules.remove_primers_dedup.output
-    output:
-        comp=temp("tmp/aln/{samplename}/cat.trimmed.comp.b"),
-        name=temp("tmp/aln/{samplename}/cat.trimmed.name"),
-        length=temp("tmp/aln/{samplename}/cat.trimmed.length.b"),
-        seq=temp("tmp/aln/{samplename}/cat.trimmed.seq.b")
-    params:
-        t_db="tmp/aln/{samplename}/cat.trimmed"
-    log: "tmp/log/aln/kma2_index_{samplename}.log"
-    shell: "kma index -nbp -k 12 -i {input} -o {params.t_db} 2> {log}"
-
-if IS_ILLUMINA:
-    rule second_kma_map:
-        input:
-            fw=rules.fastp.output.fw,
-            rv=rules.fastp.output.rv,
-            index=rules.second_kma_index.output,
-        output:
-            res="tmp/aln/{samplename}/kma2.res",
-            fsa="tmp/aln/{samplename}/kma2.fsa",
-            mat="tmp/aln/{samplename}/kma2.mat.gz",
-        params:
-            db="tmp/aln/{samplename}/cat.trimmed",
-            outbase="tmp/aln/{samplename}/kma2",
-        log: "tmp/log/aln/kma2_map_{samplename}.log"
-        threads: 2
-        shell: 
-            "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}"
-
-elif IS_NANOPORE:
-    rule second_kma_map:
-        input:
-            reads=rules.fastp.output.reads,
-            index=rules.second_kma_index.output,
-        output:
-            res="tmp/aln/{samplename}/kma2.res",
-            fsa="tmp/aln/{samplename}/kma2.fsa",
-            mat="tmp/aln/{samplename}/kma2.mat.gz",
-        params:
-            db="tmp/aln/{samplename}/cat.trimmed",
-            outbase="tmp/aln/{samplename}/kma2",
-        log: "tmp/log/aln/kma2_map_{samplename}.log"
-        threads: 2
-        shell:
-            "kma -i {input.reads:q} -o {params.outbase} -t_db {params.db} "
-            "-mp 20 -bc 0.7 -t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
+        fuzzylen=8
+    shell: 
+        "{params.juliacmd} {params.scriptpath:q} {input.primers:q} "
+        "{input.con} {output} {params.minmatches} {params.fuzzylen} > {log}"
 
 rule create_report:
     input:
-        matrix=expand("tmp/aln/{samplename}/kma1.mat.gz", samplename=SAMPLENAMES),
-        assembly=expand("tmp/aln/{samplename}/kma2.fsa", samplename=SAMPLENAMES),
-        res=expand("tmp/aln/{samplename}/kma2.res", samplename=SAMPLENAMES)
+        matrix=expand("tmp/aln/{samplename}/kma_final.mat.gz", samplename=SAMPLENAMES),
+        assembly=expand("tmp/aln/{samplename}/assembly.fna", samplename=SAMPLENAMES),
+        res=expand("tmp/aln/{samplename}/kma_final.res", samplename=SAMPLENAMES)
     output:
         consensus=expand("sequences/{samplename}/all.fna", samplename=SAMPLENAMES),
         depth=expand("depths/{samplename}_template.pdf", samplename=SAMPLENAMES),

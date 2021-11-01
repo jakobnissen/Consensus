@@ -13,10 +13,10 @@ function snakemake_entrypoint(
         (;
             sample=sample,
             fastp=joinpath(tmp_dir, "trim", name, "report.json"),
-            asm=joinpath(aln_dir, name, "kma2.fsa"),
-            res=joinpath(aln_dir, name, "kma2.res"),
-            t_depth=joinpath(aln_dir, name, "kma1.mat.gz"),
-            a_depth=joinpath(aln_dir, name, "kma2.mat.gz"),
+            asm=joinpath(aln_dir, name, "kma_final.fsa"),
+            res=joinpath(aln_dir, name, "kma_final.res"),
+            t_depth=joinpath(aln_dir, name, "kma_1.mat.gz"),
+            a_depth=joinpath(aln_dir, name, "kma_final.mat.gz"),
             t_plot=joinpath(depths_plot_dir, name * "_template.pdf"),
             a_plot=joinpath(depths_plot_dir, name * "_assembly.pdf"),
             seq_dir=joinpath(seq_dir, name)

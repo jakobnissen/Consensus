@@ -85,75 +85,31 @@ function trim_consensus(
     consensuspath::String,
     output::String,
     minlength::Int,
-    fuzzylen::Int,
-    min_id::Float64
+    fuzzylen::Int
 )
-    consensus = load_fna(consensuspath)
     primers = load_fna(primerpath)
+    # Quick path if no primers to check
+    if isempty(primers)
+        cp(consensuspath, output)
+        return nothing
+    end
+    consensus = load_fna(consensuspath)
     removed = remove_primers(consensus, primers, minlength, fuzzylen)
-    dedup = deduplicate(removed, consensuspath, min_id)
     open(FASTA.Writer, output) do writer
-        for (header, seq) in dedup
+        for (header, seq) in removed
             write(writer, FASTA.Record(header, seq))
         end
     end
 end
 
-function deduplicate(
-    seqs::Vector{Tuple{String, LongDNASeq}},
-    path::String,
-    min_id::Float64
-)::Vector{Tuple{String, LongDNASeq}}
-    bysegment = Dict{Segment, Vector{Tuple{String, LongDNASeq}}}()
-    for nameseq in seqs
-        name, _ = nameseq
-        _, segment = split_segment(name)
-        push!(get!(valtype(bysegment), bysegment, segment), nameseq)
-    end
-    result = valtype(bysegment)()
-    for (k, v) in bysegment
-        append!(result, deduplicate_v(v, min_id))
-    end
-    return result
-end
-
-function deduplicate_v(
-    seqs::Vector{Tuple{String, LongDNASeq}},
-    min_id::Float64
-)::Vector{Tuple{String, LongDNASeq}}
-    n = length(seqs)
-    n < 2 && return seqs
-    kept = [first(seqs)]
-    for nameseqi in @view(seqs[2:end])
-        _, seqi = nameseqi
-        if all(kept) do (_, seqj)
-            id_ = id(seqi, seqj)
-            id_ === nothing || id_ < min_id
-        end
-            push!(kept, nameseqi)
-        end
-    end
-    return kept
-end
-
-function id(a::LongDNASeq, b::LongDNASeq)
-    aln = BA.pairalign(BA.OverlapAlignment(), a, b, Influenza.DEFAULT_DNA_ALN_MODEL).aln
-    aln === nothing && return nothing
-    return Influenza.alignment_identity(BA.OverlapAlignment(), aln)
-end
-
 if abspath(PROGRAM_FILE) == @__FILE__
-    if length(ARGS) != 6
-        error("Usage: julia trim_consensus.jl primers.fna consensus.fna output.fna minlength fuzzylen id")
+    if length(ARGS) != 5
+        error("Usage: julia trim_consensus.jl primers.fna consensus.fna output.fna minlength fuzzylen")
     end
     minlength = parse(Int, ARGS[4])
     minlength < 1 && error("Minlength must be one")
     fuzzylen = parse(Int, ARGS[5])
     fuzzylen >= minlength || error("Fuzzylen cannot be smaller than minlength")
-    min_id = parse(Float64, ARGS[6])
-    if min_id < 0 || min_id > 1
-        error("Minimum ID must be in [0.0:1.0]")
-    end
 
-    trim_consensus(ARGS[1], ARGS[2], ARGS[3], minlength, fuzzylen, min_id)
+    trim_consensus(ARGS[1], ARGS[2], ARGS[3], minlength, fuzzylen)
 end
