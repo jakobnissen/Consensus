@@ -42,7 +42,7 @@ function main(
     # First iteration has been run outside this script with slightly different params
     iter = 1
     dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
-    assemblies = deduplicate_and_save(parse_fna(asm_path, res_path), dedup_path)
+    (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path), dedup_path)
     local mapbase
     local convergence
     iter += 1
@@ -68,12 +68,12 @@ function main(
         # Deduplicate input
         println(stderr, "Deduplicating iteration $iter...")
         dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
-        assemblies = deduplicate_and_save(parse_fna(asm_path, res_path), dedup_path)
+        (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path), dedup_path)
         println(stderr, "Existing:", "\n\t", join(("$(a.name) $(a.identity)" for a in assemblies), "\n\t"))
 
         # Break if possible
-        is_converged, convergence = has_conveged(assemblies, convergence_threshold)
-        if is_converged || iter == MAX_ITERS
+        is_converged, convergence = has_conveged(assemblies, has_deduplicated, convergence_threshold)
+        if is_converged || iter ≥ MAX_ITERS
             break
         end
 
@@ -95,10 +95,10 @@ function main(
 
     # Finally, rename the last one to "final"
     for ext in (".aln", ".mat.gz", ".res")
-        mv(mapbase * ext, joinpath(outdir, "kma_final$(ext)"))
+        cp(mapbase * ext, joinpath(outdir, "kma_final$(ext)"), force=true)
     end
-    mv(dedup_path, joinpath(outdir, "kma_final.fsa"))
-
+    cp(dedup_path, joinpath(outdir, "kma_final.fsa"), force=true)
+    cleanup(outdir, iter)
     return nothing
 end
 
@@ -135,12 +135,16 @@ function kma_nanopore(
     run(pipeline(cmd, stderr=log))
 end
 
-function deduplicate_and_save(asms::Vector{Assembly}, path::AbstractString)::Vector{Assembly}
+function deduplicate_and_save(
+    asms::Vector{Assembly},
+    path::AbstractString
+)::Tuple{Vector{Assembly}, Bool}
     next = deduplicate(asms)
     open(FASTA.Writer, path) do writer
         foreach(a -> write(writer, FASTA.Record(a)), next)
     end
-    return next
+    has_deduplicated = length(next) != length(asms)
+    return (next, has_deduplicated)
 end
 
 function deduplicate(asms::Vector{Assembly})::Vector{Assembly}
@@ -198,7 +202,7 @@ function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
     end
 
     # Else if they are too different, neither one is best
-    if isnothing(id) || id < 0.98 # this is sort of arbitrary, maybe it should be a parameter
+    if id === nothing || id < 0.98 # this is sort of arbitrary, maybe it should be a parameter
         return nothing
     end
 
@@ -217,15 +221,25 @@ function parse_fna(fsa_path::AbstractString, res_path::AbstractString)::Vector{A
             read!(reader, record)
             header = FASTA.header(record)
             row = res_by_header[header]
-            name, segment = split_segment(FASTA.header(record))
-            seq = FASTA.sequence(record)
-            push!(asms, Assembly(name, segment, seq, row.tid, row.tcov, row.depth))
+            name, segment = split_segment(FASTA.header(record)::String)
+            seq = FASTA.sequence(LongDNASeq, record)
+            
+            # Query and template identity are calculated differently, because gap
+            # positions in query/template are not counted towards identity.
+            # Hence an upper bound of the total alignment identity is the minimum
+            # of the two ids
+            id = min(row.tid, row.qid)
+            push!(asms, Assembly(name, segment, seq, id, row.tcov, row.depth))
         end
         return asms
     end
 end
 
-function has_conveged(assemblies::Vector{Assembly}, convergence_threshold)
+function has_conveged(
+    assemblies::Vector{Assembly},
+    has_deduplicated::Bool,
+    convergence_threshold::AbstractFloat
+)
     convergence = map(assemblies) do assembly
         template = assembly.name
         isconverged = assembly.identity ≥ convergence_threshold
@@ -233,9 +247,24 @@ function has_conveged(assemblies::Vector{Assembly}, convergence_threshold)
         segment = assembly.segment
         (; template, segment, isconverged, identity)
     end
-    isconverged = all(i -> i.isconverged, convergence)
+    isconverged = !has_deduplicated && all(i -> i.isconverged, convergence)
     return (isconverged, convergence)
 end
+
+function cleanup(dir::AbstractString, iters::Integer)
+    for i in 2:iters
+        rm(joinpath(dir, "kma_$(i).aln"))
+        rm(joinpath(dir, "kma_$(i).fsa"))
+        rm(joinpath(dir, "kma_$(i).mat.gz"))
+        rm(joinpath(dir, "kmaindex_$(i).comp.b"))
+        rm(joinpath(dir, "kmaindex_$(i).length.b"))
+        rm(joinpath(dir, "kmaindex_$(i).name"))
+        rm(joinpath(dir, "kmaindex_$(i).seq.b"))
+        rm(joinpath(dir, "deduplicated_$(i-1).fna"))
+    end
+    rm(joinpath(dir, "kma_$(iters).res"))
+end
+
 
 if abspath(PROGRAM_FILE) == @__FILE__
     if length(ARGS) ∉ (8, 9)
