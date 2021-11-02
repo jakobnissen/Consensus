@@ -177,7 +177,7 @@ elif IS_NANOPORE:
 rule instantiate:
     output: touch(REFOUTDIR + "/cons_instantiated")
     params: JULIA_COMMAND
-    shell: "{params} -e 'using Pkg; Pkg.instantiate()'"
+    shell: "{params} -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'"
 
 rule collect_best_templates:
     input:

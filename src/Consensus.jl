@@ -10,8 +10,8 @@ module Consensus
 using FASTX: FASTA
 using BioSequences: LongDNASeq, DNA, isgap
 using ErrorTypes: Option, some, none, unwrap, unwrap_or, @unwrap_or, and_then, map_or, is_error
-using Influenza: Influenza, Segment, Assembly, Reference, AlignedAssembly, Protein
-using FluWorkflowTools: Sample, split_segment, try_parseout_suffix
+using Influenza: Influenza, Sample, Segment, Assembly, Reference, AlignedAssembly,
+    Protein, split_segment, try_parseout_suffix
 using KMATools: KMATools
 using Printf: @sprintf
 using Transducers: Map

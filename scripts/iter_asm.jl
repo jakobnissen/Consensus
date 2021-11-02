@@ -11,8 +11,7 @@ be worth it, though.
 module t
 
 using FASTX
-using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment
-using FluWorkflowTools: split_segment
+using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment, split_segment
 using BioSequences: LongDNASeq
 using BioAlignments: pairalign, alignment, OverlapAlignment
 using KMATools: parse_res

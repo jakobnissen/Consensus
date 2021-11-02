@@ -2,8 +2,7 @@
 # then creates new indexable FASTA files for each samplename based on 
 # what segments in .res aligns to
 
-using InfluenzaCore: Segment
-using FluWorkflowTools: split_segment
+using Influenza: Segment, split_segment
 using ErrorTypes
 using FASTX: FASTA
 using BioSequences: LongDNASeq
