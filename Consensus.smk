@@ -133,13 +133,8 @@ if IS_ILLUMINA:
         threads: 2
         log: "tmp/log/aln/{samplename}.initial.log"
         shell:
-            # Here, not sure if I should sort by template cov (-ss c) or not.
-            # Pro: We mostly care about having a fully-covered template, not a partially
-            # covered with high depth at the covered areas:
-            # Con: Majority vote will win away, so it'll just fuck up if we pick a
-            # uniformly, but low covered reference anyway
             "kma -ipe {input.fw} {input.rv} -o {params.outbase} -t_db {params.db:q} "
-            "-t {threads} -nc -nf 2> {log}"        
+            "-t {threads} -mrs 0.3 -ConClave 2 -nc -nf 2> {log}"        
 
 elif IS_NANOPORE:
     rule fastp:
@@ -165,12 +160,11 @@ elif IS_NANOPORE:
         params:
             db=REFOUTDIR + "/refs", # same as index_reffile param
             outbase="tmp/aln/{samplename}/initial"
-        threads: 1
+        threads: 2
         log: "tmp/log/aln/{samplename}.initial.log"
         shell:
-            # See above comment in rule with same name
             "kma -i {input.reads} -o {params.outbase:q} -t_db {params.db:q} "
-            "-t {threads} -nc -nf 2> {log}"
+            "-t {threads} -mrs 0.3 -ConClave 2 -nc -nf 2> {log}"
 
 ### Both platforms
 # This rule downloads and installs all Julia packages needed
@@ -222,7 +216,7 @@ if IS_ILLUMINA:
         threads: 2
         shell:
             "kma -ipe {input.fw:q} {input.rv:q} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -1t1 -gapopen -5 -nf -matrix 2> {log}"
+            "-t {threads} -mrs 0.3 -1t1 -ConClave 2 -gapopen -5 -nf -matrix 2> {log}"
 
 elif IS_NANOPORE:
     rule first_kma_map:
@@ -240,7 +234,7 @@ elif IS_NANOPORE:
         threads: 2
         shell:
             "kma -i {input.reads:q} -o {params.outbase} -t_db {params.db} "
-            "-mp 20 -bc 0.7 -t {threads} -1t1 -bcNano -nf -matrix 2> {log}"
+            "-mp 20 -bc 0.7 -t {threads} -mrs 0.3 -1t1 -ConClave 2 -bcNano -nf -matrix 2> {log}"
 
 def iterative_reads(wc):
     if IS_ILLUMINA:
@@ -266,8 +260,8 @@ rule iterative_assembly:
         samplename=lambda wc: wc.samplename,
         outdir=lambda wc: f"tmp/aln/{wc.samplename}",
         logdir=lambda wc: f"tmp/log/aln/{wc.samplename}",
-        k=12,
-        threshold=0.995 if IS_ILLUMINA else 0.985,
+        k=10,
+        threshold=0.995 if IS_ILLUMINA else 0.990,
         reads=iterative_reads
     shell:
         "{params.juliacmd} -t {threads} {params.scriptpath:q} "

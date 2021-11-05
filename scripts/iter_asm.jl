@@ -119,7 +119,7 @@ function kma_illumina(
     log::AbstractString
 )
     cmd = `kma -ipe $infw $inrv -o $outbase -t_db $db
-    -t $(Threads.nthreads()) -1t1 -gapopen -5 -nf -matrix`
+    -t $(Threads.nthreads()) -1t1 -mrs 0.3 -gapopen -5 -nf -matrix`
     run(pipeline(cmd, stderr=log))
     nothing
 end
@@ -131,7 +131,7 @@ function kma_nanopore(
     log::AbstractString
 )
     cmd = `kma -i $inpath -o $outbase -t_db $db
-    -mp 20 -bc 0.7 -t $(Threads.nthreads()) -1t1 -bcNano -nf -matrix`
+    -mp 20 -bc 0.7 -t $(Threads.nthreads()) -1t1 -mrs 0.3 -bcNano -nf -matrix`
     run(pipeline(cmd, stderr=log))
 end
 
