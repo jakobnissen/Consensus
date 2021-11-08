@@ -43,7 +43,7 @@ function read_res(path::AbstractString)::Vector{String}
     best = Dict(k => first(sort!(v, lt=isworse, rev=true)) for (k, v) in bysegment)
 
     # For the others (non-best), we have different criteria: We pick all hits
-    # with id > 85%, cov > 90% and depth > 0.01 * highest_depth
+    # with id > 85%, cov > 90% and depth > 0.025 * highest_depth
     # and only if depth > 10
     highest_depth = Dict(k => first(sort(v, by=i -> i.depth, rev=true)) for (k,v) in bysegment)
 
@@ -52,7 +52,7 @@ function read_res(path::AbstractString)::Vector{String}
         vfilt = filter(v[2:end]) do row # exclude best segment at index 1
             row.tcov ≥ 0.90 &&
             row.tid ≥ 0.85 &&
-            row.depth > max(10.0, 0.01 * highest_depth[segment].depth)
+            row.depth > max(10.0, 0.025 * highest_depth[segment].depth)
         end
         append!(result, [i.template for i in vfilt])
     end

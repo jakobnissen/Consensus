@@ -12,7 +12,7 @@ module t
 
 using FASTX
 using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment, split_segment
-using BioSequences: LongDNASeq
+using BioSequences: LongDNASeq, each, DNAMer
 using BioAlignments: pairalign, alignment, OverlapAlignment
 using KMATools: parse_res
 
@@ -183,14 +183,19 @@ function deduplicate(asms::Vector{Assembly})::Vector{Assembly}
 end
 
 function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
+    naively_better = let
+        if min(a.coverage, b.coverage) > 0.98
+            a.depth > b.depth ? a : b
+        else
+            a.coverage > b.coverage ? a : b
+        end
+    end
+
     # Shortest segment is > 850 bp, so 800 is absolute minimum to ensure the assembler
     # doesn't just assemble based on a few short streches
     if min(length(a.seq), length(a.seq)) < 800
         return length(a.seq) < length(b.seq) ? b : a
     end
-
-    aln = alignment(pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL))
-    id = alignment_identity(OverlapAlignment(), aln)
 
     # If the more common has > 100x the depth of the minor variant, I don't trust it
     # maybe this criteria is silly, but I think a 100x more abundant variant will
@@ -198,8 +203,19 @@ function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
     # mismapped reads from the more abundant one as properly low-abundance reads
     bigdepth, smalldepth = minmax(a.depth, b.depth)
     if bigdepth / smalldepth > 100
-        return a.depth < b.depth ? b : a
+        return a.depth > b.depth ? a : b
     end
+
+    # This is extremely generous, even sequences > 98% id will not fullfil this criteria.
+    # The reason I have it is that if the mismatches are clustered in a small region of
+    # the sequence, the difference is likely due to bad assemblies in otherwise identical
+    # sequences. This happens if areas in one sequence do not have enough reads.
+    if kmer_jaccard_sim(a, b) > 0.6
+        return naively_better
+    end
+
+    aln = alignment(pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL))
+    id = alignment_identity(OverlapAlignment(), aln)
 
     # Else if they are too different, neither one is best
     if id === nothing || id < 0.98 # this is sort of arbitrary, maybe it should be a parameter
@@ -208,7 +224,15 @@ function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
 
     # Else, we simply pick the most abundant one since that will probably win
     # out the consensus sequence generation anyway through majority vote
-    return a.depth < b.depth ? b : a
+    return naively_better
+end
+
+function kmer_jaccard_sim(a::Assembly, b::Assembly)
+    s1 = Set(i.fw for i in each(DNAMer{31}, a.seq))
+    s2 = Set(i.fw for i in each(DNAMer{31}, b.seq))
+    T = min(length(s1), length(s2))
+    intersect!(s1, s2)
+    return length(s1) / T
 end
 
 function parse_fna(fsa_path::AbstractString, res_path::AbstractString)::Vector{Assembly}
@@ -290,4 +314,3 @@ if abspath(PROGRAM_FILE) == @__FILE__
 end
 
 end # module
-
