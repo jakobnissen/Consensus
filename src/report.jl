@@ -3,7 +3,6 @@ function snakemake_entrypoint(
     ref_dir::AbstractString, # dir of .fna + .json ref files
     aln_dir::AbstractString, # dir of kma aln
     seq_dir::AbstractString,
-    depths_plot_dir::AbstractString,
     tmp_dir::AbstractString,
     is_illumina::Bool,
 )::Nothing
@@ -17,8 +16,6 @@ function snakemake_entrypoint(
             convergence=joinpath(aln_dir, name, "convergence.tsv"),
             t_depth=joinpath(aln_dir, name, "kma_1.mat.gz"),
             a_depth=joinpath(aln_dir, name, "kma_final.mat.gz"),
-            t_plot=joinpath(depths_plot_dir, name * "_template.pdf"),
-            a_plot=joinpath(depths_plot_dir, name * "_assembly.pdf"),
             seq_dir=joinpath(seq_dir, name)
         )
     end
@@ -43,11 +40,6 @@ function snakemake_entrypoint(
         depths[i] = depths[i][ord]
         segmentorder[i] = segmentorder[i][ord]
     end
-    
-    for (sorder, path, de, alnasmv) in zip(segmentorder, paths, depths, aln_asms)
-        v = [(alnasmv[i].reference.segment, de[i]) for i in eachindex(de, alnasmv, sorder) if sorder[i] == 1]
-        plot_depths(path.t_plot, path.a_plot, v)
-    end
 
     passes = report(report_path, samples, segmentorder, aln_asms, depths, read_stats, is_illumina)
 
@@ -56,7 +48,7 @@ function snakemake_entrypoint(
     end
 
     open(GzipCompressorStream, joinpath(tmp_dir, "internal.jls.gz"), "w") do io
-        serialize_alnasms(io, samples, aln_asms, passes, segmentorder)
+        serialize(io, samples, aln_asms, depths, passes, segmentorder)
     end
 
     return nothing
