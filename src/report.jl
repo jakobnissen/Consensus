@@ -35,6 +35,14 @@ function snakemake_entrypoint(
         load_depths_and_errors(alnasmv, path.t_depth, path.a_depth)
     end
     segmentorder = map(i -> order_alnasms(i...), zip(aln_asms, depths))
+
+    # Re-order the vectors based on segment and order.
+    for i in eachindex(aln_asms, depths, segmentorder)
+        ord = sortperm([(a.reference.segment, o) for (a, o) in zip(aln_asms[i], segmentorder[i])])
+        aln_asms[i] = aln_asms[i][ord]
+        depths[i] = depths[i][ord]
+        segmentorder[i] = segmentorder[i][ord]
+    end
     
     for (sorder, path, de, alnasmv) in zip(segmentorder, paths, depths, aln_asms)
         v = [(alnasmv[i].reference.segment, de[i]) for i in eachindex(de, alnasmv, sorder) if sorder[i] == 1]
@@ -48,7 +56,7 @@ function snakemake_entrypoint(
     end
 
     open(GzipCompressorStream, joinpath(tmp_dir, "internal.jls.gz"), "w") do io
-        serialize_alnasms(io, aln_asms, passes, segmentorder)
+        serialize_alnasms(io, samples, aln_asms, passes, segmentorder)
     end
 
     return nothing

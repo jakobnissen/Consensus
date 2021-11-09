@@ -5,13 +5,16 @@ function load_aligned_assemblies(
 )::Vector{Vector{AlignedAssembly}}
     asms = map(path -> load_assembly(path), paths)
     refs = find_references(asms, jsonpath)
-    zip(asms, refs, samples) |> Map() do (asmv, refv, sample)
-        map(collect(zip(asmv, refv))) do (asm, ref)
+    result = Vector{Vector{AlignedAssembly}}(undef, length(samples))
+    Threads.@threads for i in eachindex(result, asms, refs, samples)
+        v = map(collect(zip(asms[i], refs[i]))) do (asm, ref)
             alnasm = AlignedAssembly(asm, ref)
             add_alnasm_errors!(alnasm)
             alnasm
         end
-    end |> Folds.collect
+        result[i] = v
+    end
+    return result
 end
 
 function load_assembly(path::AbstractString)::Vector{Assembly}
@@ -120,7 +123,7 @@ function write_sequences(
             id = "$(samplename)_$(protein.variant)"
             orfstr = join(["$(first(i))-$(last(i))" for i in orfs], ',')
             sec_header = "$(id)_$(ord)_$(orfstr)"
-            prim_header = "$(id)_$(ord)_$(orfstr)"
+            prim_header = "$(id)_$(orfstr)"
             rec = FASTA.Record(sec_header, aaseq)
             push!(get!(valtype(file_contents), file_contents, "all.faa"), rec)
             if passed[i]
