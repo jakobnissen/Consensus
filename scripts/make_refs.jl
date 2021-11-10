@@ -1,22 +1,127 @@
-# This script contains functionality to make the `refs.fna` and `refs.jls`
-# which is used by the consensus pipeline
+"""
+    MakeRefs
 
-using Influenza
+Create references in a format used by the Consensus pipeline.
+
+"""
+module MakeRefs
+
+using Influenza: Influenza, Reference, Segment
 using FASTX
 
-function make_refs(basepath::AbstractString, v::Vector{Reference})
-    store_references(basepath, v)
-    open(FASTA.Writer, basepath * ".fna") do writer
-        for ref in v
-            name = let
-                s = string(ref.segment)
-                if endswith(ref.name, "_$s")
-                    ref.name
-                else
-                    ref.name * '_' * s
-                end
-            end
-            write(writer, FASTA.Record(name, ref.seq))
+imap(f) = x -> Iterators.map(f, x)
+ifilter(f) = x -> Iterators.filter(f, x)
+
+struct ReferenceSet
+    byid::Dict{String, Reference}
+end
+
+ReferenceSet() = ReferenceSet(Dict{String, Reference}())
+ReferenceSet(itr) = reduce(push!, itr, init=ReferenceSet())
+Base.iterate(x::ReferenceSet, state...) = iterate(values(x.byid), state...)
+Base.length(x::ReferenceSet) = length(x.byid)
+Base.eltype(::Type{ReferenceSet}) = Reference
+
+function Base.push!(x::ReferenceSet, y)
+    vy = convert(Reference, y)
+    haskey(x.byid, vy.name) && error("Key \"$(vy.name)\" already present in set")
+    x.byid[vy.name] = vy
+    return x
+end
+
+function Base.append!(x::ReferenceSet, y)
+    for i in y
+        push!(x, i)
+    end
+    return x
+end
+
+function load_refset(paths::Vararg{AbstractString})
+    return mapreduce(Influenza.load_references, append!, paths, init=ReferenceSet())
+end
+
+function ref_fna(ref::Reference)
+    x = Influenza.try_parseout_suffix(Segment, ref.name, '_')
+    header = x === nothing ? string(ref.name, '_', ref.segment) : ref.name
+    FASTA.Record(header, ref.seq)
+end
+
+function dump_fna(path::AbstractString, set::ReferenceSet)
+    open(FASTA.Writer, path) do writer
+        for ref in set
+            write(writer, ref_fna(ref))
         end
     end
 end
+
+function dump_files(base::AbstractString, set::ReferenceSet)
+    Influenza.store_references(base * ".json", set)
+    dump_fna(base * ".fna", set)
+end
+
+"""
+Checks the presence of the cd_hit executable.
+"""
+function check_cd_hit()
+    try
+        process = run(`cd-hit-est`, wait=false)
+        wait(process)
+        return true
+    catch
+        return false
+    end
+end
+
+function deduplicate(set::ReferenceSet, tmpdir=mktempdir())
+    check_cd_hit() || error("Command `cd-hit-est` could not be executed")
+    bysegment = Dict{Segment, Vector{Reference}}()
+    for ref in set
+        push!(get!(valtype(bysegment), bysegment, ref.segment), ref)
+    end
+
+    results = Vector{Vector{Reference}}(undef, length(bysegment))
+    Threads.@threads for (i, dat) in collect(enumerate(values(bysegment)))
+        results[i] = cd_hit_deduplicate(dat, tmpdir)
+    end
+
+    return reduce(append!, results, init=ReferenceSet())
+end
+
+"Deduplicate using CD-hit"
+function cd_hit_deduplicate(
+    data::Vector{Reference},
+    tmpdir::String=mktempdir()
+)::Vector{Reference}
+    # Create FASTA file
+    isdir(tmpdir) || error("Directory not found $tmpdir")
+    fasta_path, file_io = mktemp(tmpdir)
+    writer = FASTA.Writer(file_io)
+    for ref in data
+        write(writer, FASTA.Record(ref.name, ref.seq))
+    end
+    close(writer)
+
+    # Run CD hit
+    cd_path = run_cd_hit(fasta_path)
+
+    # Read results to vector
+    names = open(cd_path) do io
+        eachline(io) |>
+        ifilter(x -> startswith(x, '>')) |>
+        imap(x -> String(strip(x)[2:end])) |>
+        collect
+    end
+
+    byname = Dict(ref.name => ref for ref in data)
+    return [byname[i] for i in names]
+end
+
+function run_cd_hit(path::AbstractString)
+    outfile = path * ".cdhit"
+    command = `cd-hit-est -i $path -o $outfile -aS 0.95 -n 9 -c 0.95 -d 32 -T 2 -M 4000`
+    pipe = pipeline(command, stdout="$path.log")
+    run(pipe)
+    return outfile
+end
+
+end # module

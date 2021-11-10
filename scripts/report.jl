@@ -1,7 +1,7 @@
 using Consensus: Consensus
 using CodecZlib: GzipDecompressorStream
 using Serialization: deserialize
-using Influenza: Segment
+using Influenza: Sample, Segment
 
 # The plotting is outside the package because it blows up loading times :(
 using Plots: Plots
@@ -54,12 +54,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
         deserialize(io)
     end
 
-    for (name, v) in data
-        vv = map(v) do (a, d, p, o)
-            (a.reference.segment, d)
-        end
-        tpath = joinpath(plotdir, name * "_template.pdf")
-        apath = joinpath(plotdir, name * "_assembly.pdf")
-        plot_depths(tpath, apath, vv)
+    bysample = Dict{Sample, Vector{Tuple{Segment, Consensus.Depths}}}()
+    for (s, a, d, p, o) in data
+        v = get!(valtype(bysample), bysample, s)
+        push!(v, (a.reference.segment, d))
+    end
+    for (sample, v) in bysample
+        tpath = joinpath(plotdir, nameof(sample) * "_template.pdf")
+        apath = joinpath(plotdir, nameof(sample) * "_assembly.pdf")
+        plot_depths(tpath, apath, v)
     end
 end

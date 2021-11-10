@@ -22,7 +22,6 @@ function snakemake_entrypoint(
     read_stats = map(p -> check_reads(p.fastp), paths)
     aln_asms = load_aligned_assemblies(
         [s.asm for s in paths],
-        [s.sample for s in paths],
         joinpath(ref_dir, "refs.json")
     )
     foreach(zip(aln_asms, paths)) do (alnasmv, path)
@@ -190,7 +189,7 @@ end
 
 # fallback: segment errors fails
 pass(::Influenza.InfluenzaError, is_illumina::Bool) = false
-pass(x::Influenza.ErrorEarlyStop, is_illumina::Bool) = x.observed_naa + 14 > x.expected_naa
+pass(x::Influenza.ErrorEarlyStop, _::Bool) = x.observed_naa + 14 > x.expected_naa
 pass(x::Influenza.ErrorInsignificant, is_illumina::Bool) = x.n_insignificant < ifelse(is_illumina, 5, 25)
 pass(x::Influenza.ErrorAmbiguous, is_illumina::Bool) = x.n_ambiguous < ifelse(is_illumina, 5, 25)
 pass(x::Influenza.ErrorLateStop, is_illumina::Bool) = true

@@ -74,10 +74,11 @@ function load_depths(
     amat = open(GzipDecompressorStream, assembly_mat_path) do io
         KMATools.parse_mat(io, assembly_mat_path)
     end
-    load_depths(tmat, amat, headers)
+    load_depths(template_mat_path, tmat, amat, headers)
 end
 
 function load_depths(
+    tmappath::AbstractString,
     template_mapping::MatType,
     assembly_mapping::MatType,
     headers::Set{Tuple{String, Segment}}
@@ -89,7 +90,7 @@ function load_depths(
     temp_headers = Set(first(i) for i in template_mapping)
     if !issubset(asm_headers, temp_headers)
         miss = first(setdiff(asm_headers, temp_headers))
-        error("Missing header from template mapping in \"$(template_mapping)\": \"$(miss)\"")
+        error("Missing header from template mapping in \"$(tmappath)\": \"$(miss)\"")
     end
     @assert issubset(headers, Set(split_segment(i) for i in asm_headers))
     template_by_header = Dict{String, Vector{KMARowType}}()

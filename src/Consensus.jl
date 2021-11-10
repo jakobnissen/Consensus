@@ -17,6 +17,7 @@ using Printf: @sprintf
 using CodecZlib: GzipDecompressorStream, GzipCompressorStream
 using Serialization: Serialization
 using JSON3: JSON3
+using REPL: TerminalMenus
 
 const N_SEGMENTS = length(instances(Segment))
 const SegmentTuple{T} = NTuple{N_SEGMENTS, T}

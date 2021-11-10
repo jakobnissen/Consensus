@@ -1,12 +1,11 @@
 function load_aligned_assemblies(
     paths::Vector{String},
-    samples::Vector{Sample},
     jsonpath::AbstractString,
 )::Vector{Vector{AlignedAssembly}}
     asms = map(path -> load_assembly(path), paths)
     refs = find_references(asms, jsonpath)
-    result = Vector{Vector{AlignedAssembly}}(undef, length(samples))
-    Threads.@threads for i in eachindex(result, asms, refs, samples)
+    result = Vector{Vector{AlignedAssembly}}(undef, length(paths))
+    Threads.@threads for i in eachindex(result, asms, refs, paths)
         v = map(collect(zip(asms[i], refs[i]))) do (asm, ref)
             alnasm = AlignedAssembly(asm, ref)
             add_alnasm_errors!(alnasm)
