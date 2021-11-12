@@ -2,8 +2,7 @@
 # then creates new indexable FASTA files for each samplename based on 
 # what segments in .res aligns to
 
-using Influenza: Segment, load_references
-using ErrorTypes
+using Influenza: Segment, Reference, load_references
 using FASTX: FASTA
 using BioSequences: LongDNASeq
 import KMATools: KMATools
@@ -61,51 +60,43 @@ function read_res(
 end
 
 function collect_sequences(
-        refdir::AbstractString,
-        headers::Set{String},
-)::Dict{String, FASTA.Record}
+    headers::Set{String},
+    refs::Vector{Reference}
+)::Dict{String, LongDNASeq}
     # First get a set of present nums
-    records = Dict{String, FASTA.Record}()
+    seqs = Dict{String, LongDNASeq}()
     present = Set{String}()
-    isempty(headers) && return records
-    fastapath = joinpath(refdir, "refs.fna")
-    open(FASTA.Reader, fastapath) do reader
-        record = FASTA.Record()
-        while !eof(reader)
-            read!(reader, record)
-            header = strip(FASTA.header(record)::String)
-            if in(header, headers)
-                records[header] = copy(record)
-                push!(present, header)
-            end
-        end
-        if headers != present
-            miss = setdiff(headers, present)
-            error("In FASTA $fastapath following headers missing: $(join(miss, ','))")
+    isempty(headers) && return seqs
+    for ref in refs
+        if in(ref.name, headers)
+            seqs[ref.name] = ref.seq
+            push!(present, ref.name)
         end
     end
-    return records
+    if headers != present
+        miss = first(setdiff(headers, present))
+        error("In reference JSON, header is missing: \"$(miss)\"")
+    end
+    return seqs
 end
 
 function dump_sequences(
     alndir::AbstractString,
     headers::Vector{Tuple{String, Vector{String}}}, # (sample, [headers...])
-    records::Dict{String, FASTA.Record}
+    seqs::Dict{String, LongDNASeq}
 )
     for (samplename, headers_) in headers
         open(FASTA.Writer, joinpath(alndir, samplename, "cat.fna")) do writer
             for header in headers_
-                record = records[header]
-                write(writer, record)
+                write(writer, FASTA.Record(header, seqs[header]))
             end
         end
     end
 end
 
 function main(alndir::AbstractString, refdir::AbstractString)
-    jsonpath = joinpath(refdir, "refs.json")
-    segment_map = Dict(ref.name => ref.segment for ref in load_references(jsonpath))
-
+    refs = load_references(joinpath(refdir, "refs.json"))
+    segment_map = Dict(r.name => r.segment for r in refs)
     headers = readdir(alndir) |> imap() do samplename
         (samplename, read_res(joinpath(alndir, samplename, "initial.res"), segment_map))
     end |> collect
@@ -113,8 +104,8 @@ function main(alndir::AbstractString, refdir::AbstractString)
         samplename, hs = new
         union!(existing, hs)
     end
-    records = collect_sequences(refdir, all_headers)
-    dump_sequences(alndir, headers, records)
+    seqs = collect_sequences(all_headers, refs)
+    dump_sequences(alndir, headers, seqs)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

@@ -18,7 +18,11 @@ function main(
 end
 
 function Influenza.Reference(x::INTERNAL_TYPE)
-    sample, alnasm = x[1], x[2]
+    sample, alnasm, order = x[1], x[2], x[5]
+    name = let
+        s = "$(nameof(sample))_$(alnasm.reference.segment)"
+        order == 0x01 ? s : s * "_$(order)"
+    end
     proteins = map(alnasm.proteins) do protein
         Influenza.ReferenceProtein(
             protein.variant,
@@ -26,7 +30,7 @@ function Influenza.Reference(x::INTERNAL_TYPE)
         )
     end
     Influenza.Reference(
-        "$(nameof(sample))_$(alnasm.reference.segment)",
+        name,
         alnasm.reference.segment,
         alnasm.assembly.seq,
         proteins

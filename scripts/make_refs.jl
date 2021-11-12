@@ -2,7 +2,6 @@
     MakeRefs
 
 Create references in a format used by the Consensus pipeline.
-
 """
 module MakeRefs
 
@@ -38,19 +37,6 @@ end
 
 function load_refsets(paths::Vararg{AbstractString})
     return mapreduce(Influenza.load_references, append!, paths, init=ReferenceSet())
-end
-
-function dump_fna(path::AbstractString, set::ReferenceSet)
-    open(FASTA.Writer, path) do writer
-        for ref in set
-            write(writer, FASTA.Record(ref.name, ref.seq))
-        end
-    end
-end
-
-function dump_files(base::AbstractString, set::ReferenceSet)
-    Influenza.store_references(base * ".json", set)
-    dump_fna(base * ".fna", set)
 end
 
 """

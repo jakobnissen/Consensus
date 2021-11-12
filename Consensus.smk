@@ -87,8 +87,16 @@ rule all:
 #################################
 # REFERENCE-ONLY PART OF PIPELINE
 #################################
+rule create_ref_fna:
+    input: REFDIR + "/refs.json"
+    output: temp(REFOUTDIR + "/refs.fna")
+    params:
+        juliacmd=JULIA_COMMAND,
+        scriptpath=f"{SNAKEDIR}/scripts/make_reffna.jl"
+    shell: '{params.juliacmd} {params.scriptpath} {input} {output}'
+
 rule index_ref:
-    input: REFDIR + "/refs.fna"
+    input: REFOUTDIR + "/refs.fna"
     output:
         comp=REFOUTDIR + "/refs.comp.b",
         name=REFOUTDIR + "/refs.name",
