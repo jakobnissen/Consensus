@@ -2,8 +2,10 @@ function load_aligned_assemblies(
     paths::Vector{String},
     jsonpath::AbstractString,
 )::Vector{Vector{AlignedAssembly}}
-    asms = map(path -> load_assembly(path), paths)
-    refs = find_references(asms, jsonpath)
+    refs = Influenza.load_references(jsonpath)
+    segment_map = Dict(ref.name => ref.segment for ref in refs)
+    asms = map(path -> load_assembly(path, segment_map), paths)
+    refs = pair_references(asms, refs)
     result = Vector{Vector{AlignedAssembly}}(undef, length(paths))
     Threads.@threads for i in eachindex(result, asms, refs, paths)
         v = map(collect(zip(asms[i], refs[i]))) do (asm, ref)
@@ -16,19 +18,18 @@ function load_aligned_assemblies(
     return result
 end
 
-function load_assembly(path::AbstractString)::Vector{Assembly}
+function load_assembly(path::AbstractString, segment_map::Dict{String, Segment})::Vector{Assembly}
     map(open(collect, FASTA.Reader, path)) do record
         temp_asm = Assembly(record, nothing)
-        (accession, segment) = split_segment(temp_asm.name)
-        Assembly(accession, temp_asm.seq, some(segment), temp_asm.insignificant)
+        segment = segment_map[temp_asm.name]
+        Assembly(temp_asm.name, temp_asm.seq, some(segment), temp_asm.insignificant)
     end
 end
 
-function find_references(
+function pair_references(
     asms::Vector{Vector{Assembly}},
-    jsonpath::AbstractString
+    refs::Vector{Reference}
 )::Vector{Vector{Reference}}
-
     accessions = Set{String}()
     for asmv in asms, asm in asmv
         push!(accessions, asm.name)
@@ -36,7 +37,7 @@ function find_references(
 
     byaccession = Dict{String, Reference}()
     added_accessions = Set{String}()
-    for reference in Influenza.load_references(jsonpath)
+    for reference in refs
         if reference.name in accessions
             push!(added_accessions, reference.name)
             byaccession[reference.name] = reference
@@ -44,7 +45,7 @@ function find_references(
     end
     missing_acc = setdiff(accessions, added_accessions)
     if !isempty(missing_acc)
-        error("Accession $(first(missing_acc)) missing from $jsonpath")
+        error("Accession $(first(missing_acc)) missing from reference JSON")
     end
 
     return map(asms) do asmv

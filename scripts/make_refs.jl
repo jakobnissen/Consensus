@@ -36,20 +36,14 @@ function Base.append!(x::ReferenceSet, y)
     return x
 end
 
-function load_refset(paths::Vararg{AbstractString})
+function load_refsets(paths::Vararg{AbstractString})
     return mapreduce(Influenza.load_references, append!, paths, init=ReferenceSet())
-end
-
-function ref_fna(ref::Reference)
-    x = Influenza.try_parseout_suffix(Segment, ref.name, '_')
-    header = x === nothing ? string(ref.name, '_', ref.segment) : ref.name
-    FASTA.Record(header, ref.seq)
 end
 
 function dump_fna(path::AbstractString, set::ReferenceSet)
     open(FASTA.Writer, path) do writer
         for ref in set
-            write(writer, ref_fna(ref))
+            write(writer, FASTA.Record(ref.name, ref.seq))
         end
     end
 end

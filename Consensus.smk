@@ -258,6 +258,7 @@ rule iterative_assembly:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/iter_asm.jl",
         samplename=lambda wc: wc.samplename,
+        refjson=f"{REFDIR}/refs.json",
         outdir=lambda wc: f"tmp/aln/{wc.samplename}",
         logdir=lambda wc: f"tmp/log/aln/{wc.samplename}",
         k=10,
@@ -265,7 +266,7 @@ rule iterative_assembly:
         reads=iterative_reads
     shell:
         "{params.juliacmd} -t {threads} {params.scriptpath:q} "
-        "{params.samplename} {input.asm} {input.res} {params.outdir} "
+        "{params.samplename} {params.refjson} {input.asm} {input.res} {params.outdir} "
         "{params.logdir} {params.k} {params.threshold} {params.reads} 2> {log}"
 
 # Both platforms

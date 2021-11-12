@@ -3,7 +3,6 @@
 
 using FASTX: FASTA
 using BioSequences: NucleotideSeq, LongDNASeq, reverse_complement, iscompatible
-using Influenza: split_segment
 
 function is_possibility(needle::NucleotideSeq, haystack::NucleotideSeq, maxerrs::Int)
     errs = 0

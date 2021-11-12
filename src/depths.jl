@@ -53,9 +53,15 @@ function load_depths_and_errors(
     template_mat_path::AbstractString,
     assembly_mat_path::AbstractString
 )::Vector{Depths}
+    segment_map = Dict(a.reference.name => a.reference.segment for a in alnasms)
     alnasm_by_refheader = Dict((a.reference.name, a.reference.segment) => a for a in alnasms)
     @assert length(alnasm_by_refheader) == length(alnasms)
-    depths = load_depths(template_mat_path, assembly_mat_path, Set(keys(alnasm_by_refheader)))
+    depths = load_depths(
+        template_mat_path,
+        assembly_mat_path,
+        Set(keys(alnasm_by_refheader)),
+        segment_map
+    )
     for (k, depth) in depths
         alnasm = alnasm_by_refheader[k]
         add_depths_errors!(alnasm, depth)
@@ -66,7 +72,8 @@ end
 function load_depths(
     template_mat_path::AbstractString,
     assembly_mat_path::AbstractString,
-    headers::Set{Tuple{String, Segment}}
+    headers::Set{Tuple{String, Segment}},
+    segment_map::Dict{String, Segment}
 )::Vector{Tuple{Tuple{String, Segment}, Depths}}
     tmat = open(GzipDecompressorStream, template_mat_path) do io
         KMATools.parse_mat(io, template_mat_path)
@@ -74,14 +81,15 @@ function load_depths(
     amat = open(GzipDecompressorStream, assembly_mat_path) do io
         KMATools.parse_mat(io, assembly_mat_path)
     end
-    load_depths(template_mat_path, tmat, amat, headers)
+    load_depths(template_mat_path, tmat, amat, headers, segment_map)
 end
 
 function load_depths(
     tmappath::AbstractString,
     template_mapping::MatType,
     assembly_mapping::MatType,
-    headers::Set{Tuple{String, Segment}}
+    headers::Set{Tuple{String, Segment}},
+    segment_map::Dict{String, Segment}
 )::Vector{Tuple{Tuple{String, Segment}, Depths}}
     # The assembly mapping is done through iterative mapping based on the template
     # mapping, so all segments present in the former must be in the latter, but
@@ -92,14 +100,15 @@ function load_depths(
         miss = first(setdiff(asm_headers, temp_headers))
         error("Missing header from template mapping in \"$(tmappath)\": \"$(miss)\"")
     end
-    @assert issubset(headers, Set(split_segment(i) for i in asm_headers))
+    @assert issubset(headers, Set((i, segment_map[i]) for i in asm_headers))
     template_by_header = Dict{String, Vector{KMARowType}}()
     for (header, rows) in template_mapping
         template_by_header[header] = rows
     end
     result = Tuple{Tuple{String, Segment}, Depths}[]
     for (header, rows) in assembly_mapping
-        pair = split_segment(header)
+        segment = segment_map[header]
+        pair = (header, segment)
         pair in headers || continue
         depths = Depths(template_by_header[header], rows)
         push!(result, (pair, depths))

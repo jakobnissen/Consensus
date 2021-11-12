@@ -6,6 +6,8 @@ function snakemake_entrypoint(
     tmp_dir::AbstractString,
     is_illumina::Bool,
 )::Nothing
+    refs = Influenza.load_references(joinpath(ref_dir, "refs.json"))
+    segment_map = Dict(ref.name => ref.segment for ref in refs)
     samples = map(Sample, sort!(readdir(aln_dir)))
     paths = map(samples) do sample
         name = nameof(sample)

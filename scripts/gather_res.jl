@@ -2,7 +2,7 @@
 # then creates new indexable FASTA files for each samplename based on 
 # what segments in .res aligns to
 
-using Influenza: Segment, split_segment
+using Influenza: Segment, load_references
 using ErrorTypes
 using FASTX: FASTA
 using BioSequences: LongDNASeq
@@ -12,13 +12,14 @@ imap(f) = x -> Iterators.map(f, x)
 ifilter(f) = x -> Iterators.filter(f, x)
 
 # This is not optimized for speed, but I seriously doubt it's going to be a problem
-function read_res(path::AbstractString)::Vector{String}
+function read_res(
+    path::AbstractString,
+    segment_map::Dict{String, Segment}
+)::Vector{String}
     rows = open(io -> KMATools.parse_res(io, path), path)
-
     bysegment = Dict{Segment, Vector{eltype(rows)}}()
     for row in rows
-        _, segment = split_segment(row.template)
-        push!(get!(valtype(bysegment), bysegment, segment), row)
+        push!(get!(valtype(bysegment), bysegment, segment_map[row.template]), row)
     end
 
     # Criterion by which to select the best segment
@@ -102,8 +103,11 @@ function dump_sequences(
 end
 
 function main(alndir::AbstractString, refdir::AbstractString)
+    jsonpath = joinpath(refdir, "refs.json")
+    segment_map = Dict(ref.name => ref.segment for ref in load_references(jsonpath))
+
     headers = readdir(alndir) |> imap() do samplename
-        (samplename, read_res(joinpath(alndir, samplename, "initial.res")))
+        (samplename, read_res(joinpath(alndir, samplename, "initial.res"), segment_map))
     end |> collect
     all_headers = foldl(headers, init=Set{String}()) do existing, new
         samplename, hs = new

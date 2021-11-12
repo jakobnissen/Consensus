@@ -11,7 +11,7 @@ be worth it, though.
 module t
 
 using FASTX
-using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment, split_segment
+using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment, load_references
 using BioSequences: LongDNASeq, each, DNAMer
 using BioAlignments: pairalign, alignment, OverlapAlignment
 using KMATools: parse_res
@@ -27,10 +27,9 @@ struct Assembly
     depth::Float64
 end
 
-FASTA.Record(a::Assembly) = FASTA.Record("$(a.name)_$(a.segment)", a.seq)
-
 function main(
     samplename::String,
+    jsonpath::AbstractString,
     readpaths::Union{AbstractString, NTuple{2, AbstractString}},
     asm_path::AbstractString,
     res_path::AbstractString,
@@ -39,10 +38,11 @@ function main(
     k::Int,
     convergence_threshold::AbstractFloat # should be lower for Nanopore?
 )
+    segment_map = Dict(ref.name => ref.segment for ref in load_references(jsonpath))
     # First iteration has been run outside this script with slightly different params
     iter = 1
     dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
-    (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path), dedup_path)
+    (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path, segment_map), dedup_path)
     local mapbase
     local convergence
     iter += 1
@@ -68,7 +68,7 @@ function main(
         # Deduplicate input
         println(stderr, "Deduplicating iteration $iter...")
         dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
-        (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path), dedup_path)
+        (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path, segment_map), dedup_path)
         println(stderr, "Existing:", "\n\t", join(("$(a.name) $(a.identity)" for a in assemblies), "\n\t"))
 
         # Break if possible
@@ -141,7 +141,7 @@ function deduplicate_and_save(
 )::Tuple{Vector{Assembly}, Bool}
     next = deduplicate(asms)
     open(FASTA.Writer, path) do writer
-        foreach(a -> write(writer, FASTA.Record(a)), next)
+        foreach(a -> write(writer, FASTA.Record(a.name, a.seq)), next)
     end
     has_deduplicated = length(next) != length(asms)
     return (next, has_deduplicated)
@@ -235,7 +235,11 @@ function kmer_jaccard_sim(a::Assembly, b::Assembly)
     return length(s1) / T
 end
 
-function parse_fna(fsa_path::AbstractString, res_path::AbstractString)::Vector{Assembly}
+function parse_fna(
+    fsa_path::AbstractString,
+    res_path::AbstractString,
+    segment_map::Dict{String, Segment}
+)::Vector{Assembly}
     res = open(io -> parse_res(io, res_path), res_path)
     res_by_header = Dict(i.template => i for i in res)
     open(FASTA.Reader, fsa_path) do reader
@@ -245,7 +249,8 @@ function parse_fna(fsa_path::AbstractString, res_path::AbstractString)::Vector{A
             read!(reader, record)
             header = FASTA.header(record)
             row = res_by_header[header]
-            name, segment = split_segment(FASTA.header(record)::String)
+            name = String(strip(FASTA.header(record)))
+            segment = segment_map[name]
             seq = FASTA.sequence(LongDNASeq, record)
             
             # Query and template identity are calculated differently, because gap
@@ -291,18 +296,19 @@ end
 
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    if length(ARGS) ∉ (8, 9)
-        error("Usage: julia iter_asm.jl samplename asmpath respath outdir logdir k threshold read1 [read2]")
+    if length(ARGS) ∉ (9, 10)
+        error("Usage: julia iter_asm.jl samplename jsonpath asmpath respath outdir logdir k threshold read1 [read2]")
     end
-    samplename, asmpath, respath, outdir, logdir = ARGS[1:5]
-    k = parse(Int, ARGS[6])
-    threshold = parse(Float64, ARGS[7])
+    samplename, jsonpath, asmpath, respath, outdir, logdir = ARGS[1:6]
+    k = parse(Int, ARGS[7])
+    threshold = parse(Float64, ARGS[8])
     if threshold < 0.0 || threshold > 1.0
         error("Threshold must be in 0.0-1.0")
     end
-    readpaths = length(ARGS) == 8 ? ARGS[8] : (ARGS[8], ARGS[9])
+    readpaths = length(ARGS) == 9 ? ARGS[9] : (ARGS[10], ARGS[10])
     main(
         samplename,
+        jsonpath,
         readpaths,
         asmpath,
         respath,
