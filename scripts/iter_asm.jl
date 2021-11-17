@@ -155,6 +155,10 @@ function deduplicate(asms::Vector{Assembly})::Vector{Assembly}
         push!(get!(valtype(bysegment), bysegment, asm.segment), asm)
     end
 
+    # If fewer than half of segments are duplicated, we have extra strict criteria
+    # and are more likely to deduplicate the other segments
+    few_duplicated = 2 * sum(i -> length(i) > 1, values(bysegment)) < length(bysegment)
+
     toremove = Set{Assembly}()
     deduplicated = Dict(k => Set{Assembly}() for k in keys(bysegment))
     for asm in asms
@@ -162,7 +166,7 @@ function deduplicate(asms::Vector{Assembly})::Vector{Assembly}
         addcurrent = true
         empty!(toremove)
         for other in set
-            bestasm = better(asm, other)
+            bestasm = better(asm, other, few_duplicated)
             if bestasm === nothing
                 nothing
             elseif bestasm === asm
@@ -171,7 +175,7 @@ function deduplicate(asms::Vector{Assembly})::Vector{Assembly}
                 addcurrent = false
                 break
             else
-                error() # unreachable!
+                @assert false "Unreachable"
             end
         end
         addcurrent && push!(set, asm)
@@ -182,7 +186,11 @@ function deduplicate(asms::Vector{Assembly})::Vector{Assembly}
     end
 end
 
-function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
+function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, Assembly}
+    # These parameters are sort of arbitrary
+    max_depth_ratio = few_duplicated ? 25 : 100
+    max_identity = few_duplicated ? 0.97 : 0.98
+
     naively_better = let
         if min(a.coverage, b.coverage) > 0.98
             a.depth > b.depth ? a : b
@@ -191,9 +199,9 @@ function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
         end
     end
 
-    # Shortest segment is > 850 bp, so 800 is absolute minimum to ensure the assembler
+    # Shortest segment is > 850 bp, so 500 is absolute minimum to ensure the assembler
     # doesn't just assemble based on a few short streches
-    if min(length(a.seq), length(a.seq)) < 800
+    if min(length(a.seq), length(a.seq)) < 500
         return length(a.seq) < length(b.seq) ? b : a
     end
 
@@ -202,23 +210,41 @@ function better(a::Assembly, b::Assembly)::Union{Nothing, Assembly}
     # completely dominate the smaller virus in the sense that there may be as many
     # mismapped reads from the more abundant one as properly low-abundance reads
     bigdepth, smalldepth = minmax(a.depth, b.depth)
-    if bigdepth / smalldepth > 100
+    if bigdepth / smalldepth > max_depth_ratio
         return a.depth > b.depth ? a : b
     end
 
-    # This is extremely generous, even sequences > 98% id will not fullfil this criteria.
-    # The reason I have it is that if the mismatches are clustered in a small region of
-    # the sequence, the difference is likely due to bad assemblies in otherwise identical
-    # sequences. This happens if areas in one sequence do not have enough reads.
-    if kmer_jaccard_sim(a, b) > 0.6
+    # Do a fast check for high kmer jaccard sim to avoid having to calculate
+    # identity - see below for explanation
+    ksim = kmer_jaccard_sim(a, b)
+    if ksim > 0.75
         return naively_better
     end
 
     aln = alignment(pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL))
     id = alignment_identity(OverlapAlignment(), aln)
 
+    # This can happen if one of the sequences are absolutely horribly reconstructed
+    if id === nothing
+        return naively_better
+    end
+
+    # Kmer jaccard sim and sequence id follow each other with some variation. If mismatches
+    # are clustered in one region of the sequences, the ksim will be disproportionately higher.
+    # The thresholds below are generous thresholds based on checking 16,000 references.
+    # If we have too many assemblies at this point, the assemblies might begin to converge
+    # in local part of the sequence only. This will cause ksim to shoot up and will be detected here.
+    max_ksim = id > 0.95 ? 0.75 :
+        id > 0.9 ? 0.5 :
+        id > 0.85 ? 0.25 :
+        0.2
+
+    if ksim > max_ksim
+        return naively_better
+    end
+
     # Else if they are too different, neither one is best
-    if id === nothing || id < 0.98 # this is sort of arbitrary, maybe it should be a parameter
+    if id === nothing || id < max_identity
         return nothing
     end
 
