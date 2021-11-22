@@ -87,13 +87,15 @@ rule all:
 #################################
 # REFERENCE-ONLY PART OF PIPELINE
 #################################
-rule create_ref_fna:
+rule create_ref_fna_jls:
     input: REFDIR + "/refs.json"
-    output: temp(REFOUTDIR + "/refs.fna")
+    output:
+        fna=temp(REFOUTDIR + "/refs.fna"),
+        jls=REFOUTDIR + "/ref_segment_map.jls",
     params:
         juliacmd=JULIA_COMMAND,
-        scriptpath=f"{SNAKEDIR}/scripts/make_reffna.jl"
-    shell: '{params.juliacmd} {params.scriptpath} {input} {output}'
+        scriptpath=f"{SNAKEDIR}/scripts/make_jlrefs.jl"
+    shell: '{params.juliacmd} {params.scriptpath} {input:q} {output.fna:q} {output.jls:q}'
 
 rule index_ref:
     input: REFOUTDIR + "/refs.fna"
@@ -266,7 +268,7 @@ rule iterative_assembly:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/iter_asm.jl",
         samplename=lambda wc: wc.samplename,
-        refjson=f"{REFDIR}/refs.json",
+        segment_map=f"{REFOUTDIR}/ref_segment_map.jls",
         outdir=lambda wc: f"tmp/aln/{wc.samplename}",
         logdir=lambda wc: f"tmp/log/aln/{wc.samplename}",
         k=10,
@@ -274,7 +276,7 @@ rule iterative_assembly:
         reads=iterative_reads
     shell:
         "{params.juliacmd} -t {threads} {params.scriptpath:q} "
-        "{params.samplename} {params.refjson} {input.asm} {input.res} {params.outdir} "
+        "{params.samplename} {params.segment_map:q} {input.asm} {input.res} {params.outdir} "
         "{params.logdir} {params.k} {params.threshold} {params.reads} 2> {log}"
 
 # Both platforms

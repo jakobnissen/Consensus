@@ -10,8 +10,9 @@ be worth it, though.
 """
 module t
 
+using Serialization: deserialize
 using FASTX
-using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment, load_references
+using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment
 using BioSequences: LongDNASeq, each, DNAMer
 using BioAlignments: pairalign, alignment, OverlapAlignment
 using KMATools: parse_res
@@ -29,7 +30,7 @@ end
 
 function main(
     samplename::String,
-    jsonpath::AbstractString,
+    segment_map_path::AbstractString,
     readpaths::Union{AbstractString, NTuple{2, AbstractString}},
     asm_path::AbstractString,
     res_path::AbstractString,
@@ -38,7 +39,7 @@ function main(
     k::Int,
     convergence_threshold::AbstractFloat # should be lower for Nanopore?
 )
-    segment_map = Dict(ref.name => ref.segment for ref in load_references(jsonpath))
+    segment_map = Dict(open(deserialize, segment_map_path))
     # First iteration has been run outside this script with slightly different params
     iter = 1
     dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
@@ -224,14 +225,14 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
     aln = alignment(pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL))
     id = alignment_identity(OverlapAlignment(), aln)
 
-    # This can happen if one of the sequences are absolutely horribly reconstructed
+    # This can happen if they are just too dissimilar
     if id === nothing
-        return naively_better
+        return nothing
     end
 
     # Kmer jaccard sim and sequence id follow each other with some variation. If mismatches
     # are clustered in one region of the sequences, the ksim will be disproportionately higher.
-    # The thresholds below are generous thresholds based on checking 16,000 references.
+    # The thresholds below are generous thresholds based on measuring 16,000 reference pairs.
     # If we have too many assemblies at this point, the assemblies might begin to converge
     # in local part of the sequence only. This will cause ksim to shoot up and will be detected here.
     max_ksim = id > 0.95 ? 0.75 :

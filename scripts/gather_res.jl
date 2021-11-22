@@ -40,11 +40,9 @@ function read_res(
         end
     end
 
-    best = Dict(k => first(sort!(v, lt=isworse, rev=true)) for (k, v) in bysegment)
-
+    best = Dict(k => partialsort!(v, 1, lt=isworse, rev=true) for (k, v) in bysegment)
     # For the others (non-best), we have different criteria: We pick all hits
     # with id > 85%, cov > 90% and depth > 0.025 * highest_depth
-    # and only if depth > 10
     highest_depth = Dict(k => first(sort(v, by=i -> i.depth, rev=true)) for (k,v) in bysegment)
 
     result = [b.template for b in values(best)]
