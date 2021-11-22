@@ -51,6 +51,14 @@ function dump_sequences(internal::Vector{INTERNAL_TYPE})
     end
     for (sample, tup) in bysample
         path = joinpath("sequences", Influenza.nameof(sample))
+        
+        # Remove existing paths
+        for filename in readdir(path, join=true)
+            if endswith(filename, ".fna") || endswith(filename, ".faa")
+                rm(filename)
+            end
+        end
+
         Consensus.write_sequences(path, sample, tup...)
     end
 end
