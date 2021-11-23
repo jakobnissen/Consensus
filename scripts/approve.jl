@@ -8,6 +8,7 @@
 module Approve
 
 using Consensus: Consensus, INTERNAL_TYPE
+using Setfield
 using Influenza
 using CodecZlib
 using Serialization
@@ -15,7 +16,7 @@ using REPL.TerminalMenus
 
 function main()
     internal = Consensus.load_internal("tmp/internal.jls.gz")
-    chosen = Consensus.pick_with_preset(i -> i[4], internal)
+    chosen = Consensus.pick_with_preset(i -> i.passed, internal)
     change_approval!(internal, chosen)
     open(GzipCompressorStream, "tmp/internal.jls.gz", "w") do io
         serialize(io, internal)
@@ -28,25 +29,25 @@ function change_approval!(
     internal::Vector{INTERNAL_TYPE},
     chosen::Set{Int},
 )
-    for (i, (s, a, d, p, o)) in enumerate(internal)
-        internal[i] = (s, a, d, in(i, chosen), o)
+    for (i, x) in enumerate(internal)
+        internal[i] = @set x.passed = in(i, chosen)
     end
 end
 
 "Use existing Consensus.write_sequences to replace the seq files."
 function dump_sequences(internal::Vector{INTERNAL_TYPE})
     bysample = Dict{Sample, Any}()
-    for (s, a, d, p, o) in internal
-        if !haskey(bysample, s)
-            bysample[s] = (
+    for x in internal
+        if !haskey(bysample, x.sample)
+            bysample[x.sample] = (
                 Influenza.AlignedAssembly[],
                 Bool[],
                 UInt8[]
             )
         else
-            push!(bysample[s][1], a)
-            push!(bysample[s][2], p)
-            push!(bysample[s][3], o)
+            push!(bysample[x.sample][1], x.alnasm)
+            push!(bysample[x.sample][2], x.passed)
+            push!(bysample[x.sample][3], x.order)
         end
     end
     for (sample, tup) in bysample

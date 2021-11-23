@@ -11,19 +11,18 @@ function main(
     outpath::AbstractString
 )
     internal = Consensus.load_internal(inpath)
-    inds = Consensus.pick_with_preset(i -> i[4], internal)
+    inds = Consensus.pick_with_preset(i -> i.passed && i.order == 1, internal)
     picked = [s for (i, s) in enumerate(internal) if in(i, inds)]
     refs = map(Influenza.Reference, picked)
     Influenza.store_references(outpath, refs)
 end
 
 function Influenza.Reference(x::INTERNAL_TYPE)
-    sample, alnasm, order = x[1], x[2], x[5]
     name = let
-        s = "$(nameof(sample))_$(alnasm.reference.segment)"
-        order == 0x01 ? s : s * "_$(order)"
+        s = "$(nameof(x.sample))_$(x.alnasm.reference.segment)"
+        order == 0x01 ? s : s * "_$(x.order)"
     end
-    proteins = map(alnasm.proteins) do protein
+    proteins = map(x.alnasm.proteins) do protein
         Influenza.ReferenceProtein(
             protein.variant,
             unwrap(protein.orfs)
@@ -31,8 +30,8 @@ function Influenza.Reference(x::INTERNAL_TYPE)
     end
     Influenza.Reference(
         name,
-        alnasm.reference.segment,
-        alnasm.assembly.seq,
+        x.alnasm.reference.segment,
+        x.alnasm.assembly.seq,
         proteins
     )
 end
