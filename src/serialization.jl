@@ -45,5 +45,5 @@ function repr_segment(x::INTERNAL_TYPE)
     symbol = x.passed ? '✓' : '✖'
     seg = rpad(string(x.alnasm.reference.segment), 3)
     str = "$(symbol)|$(seg)|$(x.order)|$(nameof(x.sample))"
-    return length(str) > 59 ? first(str, 59) * '…' : str
+    return length(str) > 60 ? first(str, 59) * '…' : str
 end

@@ -20,7 +20,7 @@ end
 function Influenza.Reference(x::INTERNAL_TYPE)
     name = let
         s = "$(nameof(x.sample))_$(x.alnasm.reference.segment)"
-        order == 0x01 ? s : s * "_$(x.order)"
+        x.order == 0x01 ? s : s * "_$(x.order)"
     end
     proteins = map(x.alnasm.proteins) do protein
         Influenza.ReferenceProtein(

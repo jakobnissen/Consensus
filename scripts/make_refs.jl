@@ -52,7 +52,7 @@ function check_cd_hit()
     end
 end
 
-function deduplicate(set::ReferenceSet, tmpdir=mktempdir())
+function deduplicate(set::ReferenceSet, id::AbstractFloat, tmpdir=mktempdir())
     check_cd_hit() || error("Command `cd-hit-est` could not be executed")
     bysegment = Dict{Segment, Vector{Reference}}()
     for ref in set
@@ -61,7 +61,7 @@ function deduplicate(set::ReferenceSet, tmpdir=mktempdir())
 
     results = Vector{Vector{Reference}}(undef, length(bysegment))
     Threads.@threads for (i, dat) in collect(enumerate(values(bysegment)))
-        results[i] = cd_hit_deduplicate(dat, tmpdir)
+        results[i] = cd_hit_deduplicate(dat, id, tmpdir)
     end
 
     return reduce(append!, results, init=ReferenceSet())
@@ -70,6 +70,7 @@ end
 "Deduplicate using CD-hit"
 function cd_hit_deduplicate(
     data::Vector{Reference},
+    id::AbstractFloat,
     tmpdir::String=mktempdir()
 )::Vector{Reference}
     # Create FASTA file
@@ -82,7 +83,7 @@ function cd_hit_deduplicate(
     close(writer)
 
     # Run CD hit
-    cd_path = run_cd_hit(fasta_path)
+    cd_path = run_cd_hit(fasta_path, id)
 
     # Read results to vector
     names = open(cd_path) do io
@@ -96,9 +97,9 @@ function cd_hit_deduplicate(
     return [byname[i] for i in names]
 end
 
-function run_cd_hit(path::AbstractString)
+function run_cd_hit(path::AbstractString, id::AbstractFloat)
     outfile = path * ".cdhit"
-    command = `cd-hit-est -i $path -o $outfile -aS 0.95 -n 9 -c 0.95 -d 32 -T 2 -M 4000`
+    command = `cd-hit-est -i $path -o $outfile -aS 0.95 -n 9 -c $(id) -d 32 -T 2 -M 4000`
     pipe = pipeline(command, stdout="$path.log")
     run(pipe)
     return outfile
