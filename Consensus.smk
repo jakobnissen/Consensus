@@ -256,7 +256,8 @@ rule iterative_assembly:
     input:
         reads=rules.fastp.output,
         asm=rules.first_kma_map.output.fsa,
-        res=rules.first_kma_map.output.res
+        res=rules.first_kma_map.output.res,
+        jls=rules.create_ref_fna_jls.output.jls
     output:
         asm="tmp/aln/{samplename}/kma_final.fsa",
         res="tmp/aln/{samplename}/kma_final.res",
