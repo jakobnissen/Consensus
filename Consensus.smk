@@ -128,7 +128,8 @@ if IS_ILLUMINA:
         shell:
             'fastp -i {input.fw:q} -I {input.rv:q} '
             '-o {output.fw:q} -O {output.rv:q} --html {output.html:q} --json {output.json:q} '
-            '--disable_adapter_trimming --trim_poly_g --cut_tail --cut_front --low_complexity_filter '
+            '--disable_adapter_trimming --trim_poly_g --poly_g_min_len 7 --cut_tail --cut_front '
+            '--cut_window_size 6 --low_complexity_filter '
             '--complexity_threshold 50 --thread {threads} 2> {log:q}'
 
     rule map_best_template:
