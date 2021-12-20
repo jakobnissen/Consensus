@@ -80,9 +80,12 @@ def done_input(wildcards):
 
 rule all:
     input: done_input
-    output: "commit_consensus.txt"
+    output: "consensus_versions.txt"
     params: SNAKEDIR
-    shell: "git -C {params:q} rev-parse --short HEAD > {output} && cp {params:q}/copy_readme.md README_CONSENSUS.md"
+    shell:
+        "cp {params:q}/copy_readme.md README_CONSENSUS.md && "
+        "git -C {params:q} rev-parse --short HEAD > {output} && "
+        "julia -v >> {output}"
 
 #################################
 # REFERENCE-ONLY PART OF PIPELINE
