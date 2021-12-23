@@ -158,7 +158,7 @@ function deduplicate(asms::Vector{Assembly})::Vector{Assembly}
 
     # If fewer than half of segments are duplicated, we have extra strict criteria
     # and are more likely to deduplicate the other segments
-    few_duplicated = 2 * sum(i -> length(i) > 1, values(bysegment)) < length(bysegment)
+    few_duplicated = 2 * sum(i -> length(i) > 1, values(bysegment), init=0) < length(bysegment)
 
     toremove = Set{Assembly}()
     deduplicated = Dict(k => Set{Assembly}() for k in keys(bysegment))

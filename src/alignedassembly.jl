@@ -136,13 +136,13 @@ function write_sequences(
                 push!(file_contents[filename], rec)
             end
         end
+    end
 
-        # Write files
-        for (filename, recs) in file_contents
-            open(FASTA.Writer, joinpath(seq_dir_name, filename)) do writer
-                for rec in recs
-                    write(writer, rec)
-                end
+    # Write files
+    for (filename, recs) in file_contents
+        open(FASTA.Writer, joinpath(seq_dir_name, filename)) do writer
+            for rec in recs
+                write(writer, rec)
             end
         end
     end

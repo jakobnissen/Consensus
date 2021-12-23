@@ -23,7 +23,6 @@ Base.eltype(::Type{ReferenceSet}) = Reference
 
 function Base.push!(x::ReferenceSet, y)
     vy = convert(Reference, y)
-    haskey(x.byid, vy.name) && error("Key \"$(vy.name)\" already present in set")
     x.byid[vy.name] = vy
     return x
 end
@@ -35,7 +34,7 @@ function Base.append!(x::ReferenceSet, y)
     return x
 end
 
-function load_refsets(paths::Vararg{AbstractString})
+function load_refsets(paths::Vector{<:AbstractString})
     return mapreduce(Influenza.load_references, append!, paths, init=ReferenceSet())
 end
 
@@ -53,7 +52,7 @@ function check_cd_hit()
 end
 
 function deduplicate(set::ReferenceSet, id::AbstractFloat, tmpdir=mktempdir())
-    check_cd_hit() || error("Command `cd-hit-est` could not be executed")
+    check_cd_hit() || error("Command `cd-hit-est` could not be executed. Is the program in your PATH?")
     bysegment = Dict{Segment, Vector{Reference}}()
     for ref in set
         push!(get!(valtype(bysegment), bysegment, ref.segment), ref)

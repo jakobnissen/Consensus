@@ -50,14 +50,12 @@ if abspath(PROGRAM_FILE) == @__FILE__
     
     Consensus.snakemake_entrypoint(reportpath, refdir, alndir, consdir, tmpdir, illumina)
 
+    bysample = Dict(Sample(dirname) => Tuple{Segment, Consensus.Depths}[] for dirname in readdir(alndir))
     data = open(GzipDecompressorStream, joinpath(tmpdir, "internal.jls.gz")) do io
         deserialize(io)
     end
-
-    bysample = Dict{Sample, Vector{Tuple{Segment, Consensus.Depths}}}()
     for (s, a, d, p, o) in data
-        v = get!(valtype(bysample), bysample, s)
-        push!(v, (a.reference.segment, d))
+        push!(bysample[s], (a.reference.segment, d))
     end
     for (sample, v) in bysample
         tpath = joinpath(plotdir, nameof(sample) * "_template.pdf")
