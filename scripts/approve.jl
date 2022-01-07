@@ -44,11 +44,10 @@ function dump_sequences(internal::Vector{INTERNAL_TYPE})
                 Bool[],
                 UInt8[]
             )
-        else
-            push!(bysample[x.sample][1], x.alnasm)
-            push!(bysample[x.sample][2], x.passed)
-            push!(bysample[x.sample][3], x.order)
         end
+        push!(bysample[x.sample][1], x.alnasm)
+        push!(bysample[x.sample][2], x.passed)
+        push!(bysample[x.sample][3], x.order)
     end
     for (sample, tup) in bysample
         path = joinpath("sequences", Influenza.nameof(sample))
