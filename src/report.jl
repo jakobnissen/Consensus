@@ -193,4 +193,8 @@ pass(x::Influenza.ErrorEarlyStop, _::Bool) = x.observed_naa + 14 > x.expected_na
 pass(x::Influenza.ErrorInsignificant, is_illumina::Bool) = x.n_insignificant < ifelse(is_illumina, 5, 25)
 pass(x::Influenza.ErrorAmbiguous, is_illumina::Bool) = x.n_ambiguous < ifelse(is_illumina, 5, 25)
 pass(x::Influenza.ErrorLateStop, is_illumina::Bool) = true
-pass(x::Influenza.ErrorLowDepthBases, is_illumina::Bool) = true
+
+# We fail with low depth because cross-contamination from other samples
+# can give enough reads to reconstruct a segment.
+# If more than 500 bp have lower than 25 depth, we can't trust it.
+pass(x::Influenza.ErrorLowDepthBases, is_illumina::Bool) = x.n < 500
