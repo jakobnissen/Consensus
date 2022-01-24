@@ -83,13 +83,16 @@ function dump_sequences(
     headers::Vector{Tuple{String, Vector{String}}}, # (sample, [headers...])
     seqs::Dict{String, LongDNASeq}
 )
+    empties = Set{String}()
     for (samplename, headers_) in headers
         open(FASTA.Writer, joinpath(alndir, samplename, "cat.fna")) do writer
             for header in headers_
                 write(writer, FASTA.Record(header, seqs[header]))
             end
+            isempty(headers_) && push!(empties, samplename)
         end
     end
+    empties
 end
 
 function main(alndir::AbstractString, refdir::AbstractString)
@@ -103,7 +106,16 @@ function main(alndir::AbstractString, refdir::AbstractString)
         union!(existing, hs)
     end
     seqs = collect_sequences(all_headers, refs)
-    dump_sequences(alndir, headers, seqs)
+    empties = dump_sequences(alndir, headers, seqs)
+    if !isempty(empties)
+        error(
+        "One or more samples maps to no references.
+        The following samples does not map to any references.
+        Several steps in the pipeline assume a nonempty reference set for each sample.
+        To continue, remove the following samples, delete the output, and rerun the pipeline:
+        $(join(empties, '\n'))"
+        )
+    end       
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

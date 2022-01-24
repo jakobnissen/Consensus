@@ -14,8 +14,8 @@ using CodecZlib
 using Serialization
 using REPL.TerminalMenus
 
-function main()
-    internal = Consensus.load_internal("tmp/internal.jls.gz")
+function main(path)
+    internal = Consensus.load_internal(path)
     chosen = Consensus.pick_with_preset(i -> i.passed, internal)
     change_approval!(internal, chosen)
     open(GzipCompressorStream, "tmp/internal.jls.gz", "w") do io
@@ -64,10 +64,10 @@ function dump_sequences(internal::Vector{INTERNAL_TYPE})
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    if length(ARGS) != 0
-        error("Usage: julia approve.jl")
+    if length(ARGS) != 1
+        error("Usage: julia approve.jl internal")
     end
-    main()
+    main(ARGS[1])
 end
 
 end # module

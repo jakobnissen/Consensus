@@ -20,6 +20,7 @@ ReferenceSet(itr) = reduce(push!, itr, init=ReferenceSet())
 Base.iterate(x::ReferenceSet, state...) = iterate(values(x.byid), state...)
 Base.length(x::ReferenceSet) = length(x.byid)
 Base.eltype(::Type{ReferenceSet}) = Reference
+Base.copy(x::ReferenceSet) = ReferenceSet(copy(x.byid))
 
 function Base.push!(x::ReferenceSet, y)
     vy = convert(Reference, y)

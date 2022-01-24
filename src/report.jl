@@ -189,6 +189,9 @@ end
 
 # fallback: segment errors fails
 pass(::Influenza.InfluenzaError, is_illumina::Bool) = false
+
+# Seems weird, but NA stalk can have 75 bp without any problems
+pass(x::Influenza.ErrorIndelTooBig, _::Bool) = length(x.indel) < 100
 pass(x::Influenza.ErrorEarlyStop, _::Bool) = x.observed_naa + 14 > x.expected_naa
 pass(x::Influenza.ErrorInsignificant, is_illumina::Bool) = x.n_insignificant < ifelse(is_illumina, 5, 25)
 pass(x::Influenza.ErrorAmbiguous, is_illumina::Bool) = x.n_ambiguous < ifelse(is_illumina, 5, 25)
