@@ -17,6 +17,9 @@ using REPL.TerminalMenus
 function main(path)
     internal = Consensus.load_internal(path)
     chosen = Consensus.pick_with_preset(i -> i.passed, internal)
+    if chosen === nothing
+        return nothing
+    end
     change_approval!(internal, chosen)
     open(GzipCompressorStream, "tmp/internal.jls.gz", "w") do io
         serialize(io, internal)

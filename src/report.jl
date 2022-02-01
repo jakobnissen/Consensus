@@ -89,8 +89,7 @@ function report(
     indexof = Dict(a => i for (i, a) in enumerate(alnasms))
     passes = fill(false, length(alnasms))
 
-    primary = Vector{Union{Tuple{AlignedAssembly, Depths}, Nothing}}(undef, N_SEGMENTS)
-    fill!(primary, nothing)
+    primary = Vector{Union{Tuple{AlignedAssembly, Depths}, Nothing}}(nothing, N_SEGMENTS)
     aux = Tuple{AlignedAssembly, Depths, UInt8}[]
     for i in eachindex(alnasms, depths, order)
         a, d, o = alnasms[i], depths[i], order[i]

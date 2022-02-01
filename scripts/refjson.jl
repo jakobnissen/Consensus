@@ -13,6 +13,9 @@ function main(
     isfile(outpath) && error("File exists: \"$outpath\"")
     internal = Consensus.load_internal(inpath)
     inds = Consensus.pick_with_preset(i -> i.passed && i.order == 1, internal)
+    if inds === nothing
+        return nothing
+    end
     picked = [s for (i, s) in enumerate(internal) if in(i, inds)]
     refs = map(Influenza.Reference, picked)
     Influenza.store_references(outpath, refs)

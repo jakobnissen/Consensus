@@ -38,11 +38,26 @@ function pick_with_preset(f::Function, segments::Vector{INTERNAL_TYPE})
     options = map(repr_segment, segments)
     menu = TerminalMenus.MultiSelectMenu(options, pagesize=40, selected=selected)
     println("Pick segments")
-    return TerminalMenus.request(menu)
+    chosen = TerminalMenus.request(menu)
+    if isempty(chosen)
+        while true
+            print(
+                "No entries selected. Did you quit (Q) or select none (N)?",
+                "\n(Q / N):"
+            )
+            answer = lowercase(strip(readline()))
+            if answer == "q"
+                return nothing
+            elseif answer == "n"
+                return Set{Int}()
+            end
+        end
+    end
+    return chosen
 end
 
 function repr_segment(x::INTERNAL_TYPE)
-    symbol = x.passed ? '✓' : '✖'
+    symbol = x.passed ? 'v' : 'x'
     seg = rpad(string(x.alnasm.reference.segment), 3)
     str = "$(symbol)|$(seg)|$(x.order)|$(nameof(x.sample))"
     return length(str) > 60 ? first(str, 59) * '…' : str

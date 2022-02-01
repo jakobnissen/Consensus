@@ -1,5 +1,6 @@
 # Contents of this directory
 This directory contains files from a run of the SSI Influenza consensus pipeline.
+Read more on the Consensus page of the InfluenzaDocumentation page.
 Contact Jakob Nybo Nissen for details.
 There may be additional files unlisted here, most likely from the phylogeny pipeline.
 See its equivalent README file.
