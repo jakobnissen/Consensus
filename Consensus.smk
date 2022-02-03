@@ -261,6 +261,7 @@ rule iterative_assembly:
         reads=rules.fastp.output,
         asm=rules.first_kma_map.output.fsa,
         res=rules.first_kma_map.output.res,
+        mat=rules.first_kma_map.output.mat,
         jls=rules.create_ref_fna_jls.output.jls
     output:
         asm="tmp/aln/{samplename}/kma_final.fsa",
@@ -281,8 +282,8 @@ rule iterative_assembly:
         reads=iterative_reads
     shell:
         "{params.juliacmd} -t {threads} {params.scriptpath:q} "
-        "{params.samplename} {params.segment_map:q} {input.asm} {input.res} {params.outdir} "
-        "{params.logdir} {params.k} {params.threshold} {params.reads} 2> {log}"
+        "{params.samplename} {params.segment_map:q} {input.asm} {input.res} {input.mat} "
+        "{params.outdir} {params.logdir} {params.k} {params.threshold} {params.reads} 2> {log}"
 
 # Both platforms
 # We need to map to multiple templates per segments to catch superinfections.

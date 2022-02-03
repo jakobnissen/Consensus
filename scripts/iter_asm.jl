@@ -13,9 +13,10 @@ module t
 using Serialization: deserialize
 using FASTX
 using Influenza: DEFAULT_DNA_ALN_MODEL, alignment_identity, Segment
-using BioSequences: LongDNASeq, each, DNAMer
-using BioAlignments: pairalign, alignment, OverlapAlignment
-using KMATools: parse_res
+using BioSequences: LongDNASeq, each, DNAMer, DNA, isgap
+using BioAlignments: pairalign, alignment, OverlapAlignment, PairwiseAlignment
+using KMATools: parse_res, parse_mat
+using CodecZlib: GzipDecompressorStream
 
 const MAX_ITERS = 6
 
@@ -26,6 +27,7 @@ struct Assembly
     identity::Float64
     coverage::Float64
     depth::Float64
+    depths::Vector{UInt32}
 end
 
 function main(
@@ -34,6 +36,7 @@ function main(
     readpaths::Union{AbstractString, NTuple{2, AbstractString}},
     asm_path::AbstractString,
     res_path::AbstractString,
+    mat_path::AbstractString,
     outdir::AbstractString,
     logdir::AbstractString,
     k::Int,
@@ -43,7 +46,9 @@ function main(
     # First iteration has been run outside this script with slightly different params
     iter = 1
     dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
-    (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path, segment_map), dedup_path)
+    (assemblies, has_deduplicated) = deduplicate_and_save(
+        parse_fna(asm_path, res_path, mat_path, segment_map), dedup_path
+    )
     local mapbase
     local convergence
     iter += 1
@@ -59,6 +64,7 @@ function main(
         mapbase = joinpath(outdir, "kma_$(iter)")
         asm_path = mapbase * ".fsa"
         res_path = mapbase * ".res"
+        mat_path = mapbase * ".mat.gz"
         maplog = joinpath(logdir, "kma_$(iter)_$(samplename).log")
         if readpaths isa String # should be statically resolved
             kma_nanopore(readpaths, mapbase, indexbase, maplog)
@@ -69,7 +75,9 @@ function main(
         # Deduplicate input
         println(stderr, "Deduplicating iteration $iter...")
         dedup_path = joinpath(outdir, "deduplicated_$(iter).fna")
-        (assemblies, has_deduplicated) = deduplicate_and_save(parse_fna(asm_path, res_path, segment_map), dedup_path)
+        (assemblies, has_deduplicated) = deduplicate_and_save(
+            parse_fna(asm_path, res_path, mat_path, segment_map), dedup_path
+        )
         println(stderr, "Existing:", "\n\t", join(("$(a.name) $(a.identity)" for a in assemblies), "\n\t"))
 
         # Break if possible
@@ -189,7 +197,7 @@ end
 
 function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, Assembly}
     # These parameters are sort of arbitrary
-    max_depth_ratio = few_duplicated ? 25 : 100
+    max_depth_ratio = few_duplicated ? 20 : 50
     max_identity = few_duplicated ? 0.97 : 0.98
 
     naively_better = let
@@ -206,8 +214,8 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
         return length(a.seq) < length(b.seq) ? b : a
     end
 
-    # If the more common has > 100x the depth of the minor variant, I don't trust it
-    # maybe this criteria is silly, but I think a 100x more abundant variant will
+    # If the more common has > 50x the depth of the minor variant, I don't trust it
+    # maybe this criteria is silly, but I think a 50x more abundant variant will
     # completely dominate the smaller virus in the sense that there may be as many
     # mismapped reads from the more abundant one as properly low-abundance reads
     bigdepth, smalldepth = minmax(a.depth, b.depth)
@@ -224,6 +232,16 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
 
     aln = alignment(pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL))
     id = alignment_identity(OverlapAlignment(), aln)
+
+    # Different part of the sequences can adapt to different references, i.e. the 3'
+    # adapt to ref A and 5' to ref B. In that case the assemblies appear distinct, because
+    # the parts poorly covered by reads will be different due to uncertain asssemblies in
+    # those areas.
+    # We check if there are BOTH big parts of the segment where A has higher depth than B, and
+    # parts where B >> A, and remove a segment if so.
+    if is_mutually_much_deeper(aln, a, b)
+        return naively_better
+    end
 
     # This can happen if they are just too dissimilar
     if id === nothing
@@ -254,6 +272,38 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
     return naively_better
 end
 
+# Is the depths such that there are large sections where both query is much deeper
+# than reference and sections where the oppotiste is true?
+function is_mutually_much_deeper(aln::PairwiseAlignment, query::Assembly, ref::Assembly)::Bool
+    n_q_deeper = n_r_deeper = 0
+    q_index = r_index = 0
+    n_matches = 0
+    for (q, r) in aln
+        if !isgap(q)
+            q_index += 1
+            # Safety measure because I'm not 100% sure when KMA assigns bases
+            # as opposed to gaps.
+            q_index > length(query.depths) && break
+        end
+        if !isgap(r)
+            r_index += 1
+            r_index > length(ref.depths) && break
+        end
+        if !isgap(r) && !isgap(q)
+            n_matches += 1
+            qd = query.depths[q_index]
+            rd = ref.depths[r_index]
+            n_q_deeper += is_much_deeper(qd, rd)
+            n_r_deeper += is_much_deeper(rd, qd)
+        end
+    end
+    min_frac_deeper, max_frac_deeper = minmax(n_q_deeper, n_r_deeper) ./ n_matches
+    min_frac_deeper > 0.05 && max_frac_deeper > 0.1
+end
+
+# Whether a is significantly deeper than "than"
+is_much_deeper(a::Integer, than::Integer)::Bool = (max(a, than) > 50) & (a > 5*than)
+
 function kmer_jaccard_sim(a::Assembly, b::Assembly)
     s1 = Set(i.fw for i in each(DNAMer{31}, a.seq))
     s2 = Set(i.fw for i in each(DNAMer{31}, b.seq))
@@ -265,10 +315,15 @@ end
 function parse_fna(
     fsa_path::AbstractString,
     res_path::AbstractString,
+    mat_path::AbstractString,
     segment_map::Dict{String, Segment}
 )::Vector{Assembly}
     res = open(io -> parse_res(io, res_path), res_path)
     res_by_header = Dict(i.template => i for i in res)
+    depths_by_header = Dict(
+        name => parse_depth_vector(v)
+        for (name, v) in open(io -> parse_mat(io, mat_path), GzipDecompressorStream, mat_path)
+    )
     open(FASTA.Reader, fsa_path) do reader
         asms = Assembly[]
         record = FASTA.Record()
@@ -276,6 +331,7 @@ function parse_fna(
             read!(reader, record)
             header = FASTA.header(record)
             row = res_by_header[header]
+            depths = depths_by_header[header]
             name = String(strip(FASTA.header(record)))
             segment = segment_map[name]
             seq = FASTA.sequence(LongDNASeq, record)
@@ -285,10 +341,23 @@ function parse_fna(
             # Hence an upper bound of the total alignment identity is the minimum
             # of the two ids
             id = min(row.tid, row.qid)
-            push!(asms, Assembly(name, segment, seq, id, row.tcov, row.depth))
+            push!(asms, Assembly(name, segment, seq, id, row.tcov, row.depth, depths))
         end
         return asms
     end
+end
+
+function parse_depth_vector(depths_vector::Vector{<:Tuple{DNA, Tuple{Vararg{Integer}}}})
+    res = UInt32[]
+    for (_dna, deps) in depths_vector
+        n_gaps = last(deps)
+        biggest = maximum(deps[1:lastindex(deps)-1])
+        if n_gaps ≤ biggest
+            nongaps = sum(deps[1:lastindex(deps)-1], init=zero(eltype(deps)))
+            push!(res, UInt32(nongaps))
+        end
+    end
+    res
 end
 
 function has_conveged(
@@ -323,22 +392,23 @@ end
 
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    if length(ARGS) ∉ (9, 10)
-        error("Usage: julia iter_asm.jl samplename jsonpath asmpath respath outdir logdir k threshold read1 [read2]")
+    if length(ARGS) ∉ (10, 11)
+        error("Usage: julia iter_asm.jl samplename jsonpath asmpath respath matpath outdir logdir k threshold read1 [read2]")
     end
-    samplename, jsonpath, asmpath, respath, outdir, logdir = ARGS[1:6]
-    k = parse(Int, ARGS[7])
-    threshold = parse(Float64, ARGS[8])
+    samplename, jsonpath, asmpath, respath, matpath, outdir, logdir = ARGS[1:7]
+    k = parse(Int, ARGS[8])
+    threshold = parse(Float64, ARGS[9])
     if threshold < 0.0 || threshold > 1.0
         error("Threshold must be in 0.0-1.0")
     end
-    readpaths = length(ARGS) == 9 ? ARGS[9] : (ARGS[10], ARGS[10])
+    readpaths = length(ARGS) == 10 ? ARGS[10] : (ARGS[10], ARGS[11])
     main(
         samplename,
         jsonpath,
         readpaths,
         asmpath,
         respath,
+        matpath,
         outdir,
         logdir,
         k,
