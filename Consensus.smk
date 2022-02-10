@@ -135,7 +135,7 @@ if IS_ILLUMINA:
             '--cut_window_size 6 --low_complexity_filter '
             '--complexity_threshold 50 --thread {threads} 2> {log:q}'
 
-    rule map_best_template:
+    rule inital_map:
         input:
             fw=rules.fastp.output.fw,
             rv=rules.fastp.output.rv,
@@ -166,7 +166,7 @@ elif IS_NANOPORE:
             '--complexity_threshold 50 --length_limit 2400 --length_required 100 '
             '--average_qual 12 --thread {threads} 2> {log}'
 
-    rule map_best_template:
+    rule inital_map:
         input:
             reads=rules.fastp.output.reads,
             index=rules.index_ref.output
@@ -187,69 +187,6 @@ rule instantiate:
     params: JULIA_COMMAND
     shell: "{params} -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'"
 
-rule collect_best_templates:
-    input:
-        spas=expand("tmp/aln/{samplename}/initial.res", samplename=SAMPLENAMES),
-        inst=REFOUTDIR + "/cons_instantiated"
-    output: temp(expand("tmp/aln/{samplename}/cat.fna", samplename=SAMPLENAMES))
-    params:
-        juliacmd=JULIA_COMMAND,
-        scriptpath=f"{SNAKEDIR}/scripts/gather_res.jl",
-        refpath=REFDIR
-    shell: "{params.juliacmd} {params.scriptpath:q} tmp/aln {params.refpath:q}"
-
-rule first_kma_index:
-    input: "tmp/aln/{samplename}/cat.fna"
-    output:
-        comp=temp("tmp/aln/{samplename}/cat.comp.b"),
-        name=temp("tmp/aln/{samplename}/cat.name"),
-        length=temp("tmp/aln/{samplename}/cat.length.b"),
-        seq=temp("tmp/aln/{samplename}/cat.seq.b")
-    params:
-        t_db="tmp/aln/{samplename}/cat"
-    log: "tmp/log/aln/kma1_index_{samplename}.log"
-    # The pipeline is very sensitive to the value of k here.
-    # Too low means the mapping is excruciatingly slow,
-    # too high results in poor mapping quality.
-    shell: "kma index -nbp -k 10 -i {input:q} -o {params.t_db} 2> {log}"
-
-if IS_ILLUMINA:
-    rule first_kma_map:
-        input:
-            fw=rules.fastp.output.fw,
-            rv=rules.fastp.output.rv,
-            index=rules.first_kma_index.output,
-        output:
-            res="tmp/aln/{samplename}/kma_1.res",
-            fsa="tmp/aln/{samplename}/kma_1.fsa",
-            mat="tmp/aln/{samplename}/kma_1.mat.gz",
-        params:
-            db="tmp/aln/{samplename}/cat",
-            outbase="tmp/aln/{samplename}/kma_1",
-        log: "tmp/log/aln/kma1_map_{samplename}.log"
-        threads: 2
-        shell:
-            "kma -ipe {input.fw:q} {input.rv:q} -o {params.outbase} -t_db {params.db} "
-            "-t {threads} -mrs 0.3 -1t1 -ConClave 2 -gapopen -5 -nf -matrix 2> {log}"
-
-elif IS_NANOPORE:
-    rule first_kma_map:
-        input:
-            reads=rules.fastp.output.reads,
-            index=rules.first_kma_index.output,
-        output:
-            res="tmp/aln/{samplename}/kma_1.res",
-            fsa="tmp/aln/{samplename}/kma_1.fsa",
-            mat="tmp/aln/{samplename}/kma_1.mat.gz",
-        params:
-            db="tmp/aln/{samplename}/cat",
-            outbase="tmp/aln/{samplename}/kma_1",
-        log: "tmp/log/aln/kma1_map_{samplename}.log"
-        threads: 2
-        shell:
-            "kma -i {input.reads:q} -o {params.outbase} -t_db {params.db} "
-            "-mp 20 -bc 0.7 -t {threads} -mrs 0.3 -1t1 -ConClave 2 -bcNano -nf -matrix 2> {log}"
-
 def iterative_reads(wc):
     if IS_ILLUMINA:
         return [f'tmp/trim/{wc.samplename}/fw.fq', f'tmp/trim/{wc.samplename}/rv.fq']
@@ -258,11 +195,10 @@ def iterative_reads(wc):
 
 rule iterative_assembly:
     input:
+        inst=REFOUTDIR + "/cons_instantiated",
+        res="tmp/aln/{samplename}/initial.res",
         reads=rules.fastp.output,
-        asm=rules.first_kma_map.output.fsa,
-        res=rules.first_kma_map.output.res,
-        mat=rules.first_kma_map.output.mat,
-        jls=rules.create_ref_fna_jls.output.jls
+        jls=rules.create_ref_fna_jls.output.jls # segment map
     output:
         asm="tmp/aln/{samplename}/kma_final.fsa",
         res="tmp/aln/{samplename}/kma_final.res",
@@ -274,7 +210,8 @@ rule iterative_assembly:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/iter_asm.jl",
         samplename=lambda wc: wc.samplename,
-        segment_map=f"{REFOUTDIR}/ref_segment_map.jls",
+        refjson=REFDIR + "/refs.json",
+        templatepath=lambda wc: f"tmp/aln/{wc.samplename}/template_initial.fna",
         outdir=lambda wc: f"tmp/aln/{wc.samplename}",
         logdir=lambda wc: f"tmp/log/aln/{wc.samplename}",
         k=10,
@@ -282,8 +219,9 @@ rule iterative_assembly:
         reads=iterative_reads
     shell:
         "{params.juliacmd} -t {threads} {params.scriptpath:q} "
-        "{params.samplename} {params.segment_map:q} {input.asm} {input.res} {input.mat} "
-        "{params.outdir} {params.logdir} {params.k} {params.threshold} {params.reads} 2> {log}"
+        "{params.samplename} {params.refjson:q} {params.templatepath} {input.res} "
+        "{params.outdir} {params.logdir} {params.k} {params.threshold} {params.reads:q} "
+        "2> {log}"
 
 # Both platforms
 # We need to map to multiple templates per segments to catch superinfections.
