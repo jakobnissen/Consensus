@@ -154,6 +154,20 @@ function report_segment(
     end
     (alnasm, depth) = data
     print_segment_header(buf, alnasm, depth)
+
+    # If an error is terminating, it's so bad that we don't need to print
+    # the other errors as they would just be spam. E.g. if the depth is < 5
+    # or coverage is < 0.75
+    critical_errors = filter(alnasm.errors) do error
+        (error isa Influenza.ErrorLowDepthBases && error.n > 500) ||
+        (error isa Influenza.ErrorLowCoverage && error.coverage < 0.75)
+    end
+    if !isempty(critical_errors)
+        println(buf, "\t\tERROR ", first(critical_errors))
+        println(buf, "\t\t      Skipping additional errors...")
+        return (buf, false)
+    end
+
     for error in alnasm.errors
         p = pass(error, is_illumina)
         println(buf, "\t\t", (p ? "      " : "ERROR "), error)
