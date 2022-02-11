@@ -14,7 +14,7 @@ imap(f) = x -> Iterators.map(f, x)
 
 # This is not optimized for speed, but I seriously doubt it's going to be a problem
 """
-    read_res(path, segment_map) => Vector{String}
+    read_res(path, ref_dict) => Vector{String}
 
 Parse the kma.res file at `path`, returning a vector of names of the templates
 that should be used.

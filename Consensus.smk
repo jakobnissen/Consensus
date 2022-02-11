@@ -4,6 +4,7 @@ import os
 SNAKEDIR = os.path.dirname(workflow.snakefile)
 sys.path.append(os.path.join(SNAKEDIR, "scripts"))
 import tools
+import json
 
 JULIA_COMMAND = f"JULIA_LOAD_PATH='{SNAKEDIR}' julia --startup-file=no"
 
@@ -90,15 +91,16 @@ rule all:
 #################################
 # REFERENCE-ONLY PART OF PIPELINE
 #################################
-rule create_ref_fna_jls:
+rule create_ref_fna:
     input: REFDIR + "/refs.json"
-    output:
-        fna=temp(REFOUTDIR + "/refs.fna"),
-        jls=REFOUTDIR + "/ref_segment_map.jls",
-    params:
-        juliacmd=JULIA_COMMAND,
-        scriptpath=f"{SNAKEDIR}/scripts/make_jlrefs.jl"
-    shell: '{params.juliacmd} {params.scriptpath} {input:q} {output.fna:q} {output.jls:q}'
+    output: temp(REFOUTDIR + "/refs.fna")
+    run:
+        with open(input[0]) as file:
+            refs = json.load(file)
+        with open(output[0], "w") as file:
+            for ref in refs:
+                print('>', ref['name'], sep='', file=file)
+                print(ref['seq'], file=file)
 
 rule index_ref:
     input: REFOUTDIR + "/refs.fna"
@@ -197,8 +199,7 @@ rule iterative_assembly:
     input:
         inst=REFOUTDIR + "/cons_instantiated",
         res="tmp/aln/{samplename}/initial.res",
-        reads=rules.fastp.output,
-        jls=rules.create_ref_fna_jls.output.jls # segment map
+        reads=rules.fastp.output
     output:
         asm="tmp/aln/{samplename}/kma_final.fsa",
         res="tmp/aln/{samplename}/kma_final.res",
