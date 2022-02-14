@@ -127,6 +127,10 @@ using BioAlignments: pairalign, alignment, OverlapAlignment, PairwiseAlignment
 using KMATools: parse_res, parse_mat
 using CodecZlib: GzipDecompressorStream
 
+# Currently KMA is pretty bad at handling indels, and may take MANY iterations
+# (say, 10 or 15) to handle large indels in NA stalk.
+# However, most times a segment fails, it's irredeemable.
+# KMA should be improved, or else NA should be special cased with more iterations.
 const MAX_ITERS = 6
 
 struct Assembly
@@ -516,6 +520,7 @@ function cleanup(dir::AbstractString, iters::Integer)
         rm(joinpath(dir, "kmaindex_$(i).seq.b"))
     end
     rm(joinpath(dir, "template_initial.fna"))
+    rm(joinpath(dir, "kma_$(iters).res"))
 end
 
 end # module
