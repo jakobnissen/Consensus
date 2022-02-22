@@ -233,7 +233,7 @@ rule remove_primers:
     input:
         con=rules.iterative_assembly.output.asm,
         primers=f"{REFDIR}/primers.fna"
-    output: temp("tmp/aln/{samplename}/assembly.fna")
+    output: "tmp/aln/{samplename}/assembly.fna"
     log: "tmp/log/consensus/remove_primers_{samplename}.txt"
     params:
         juliacmd=JULIA_COMMAND,

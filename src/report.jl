@@ -1,3 +1,5 @@
+const KMerSet = Set{DNAMer{16}}
+
 function snakemake_entrypoint(
     report_path::AbstractString, # output report
     ref_dir::AbstractString, # dir of .fna + .json ref files
@@ -68,11 +70,15 @@ function report(
 )::Vector{Vector{Bool}}
     result = Vector{Bool}[]
     open(report_path, "w") do io
+        # Print report for each segment
         for i in eachindex(samples)
             v = report(io, samples[i], order[i], alnasms[i], depths[i], read_stats[i], is_illumina)
             push!(result, v)
         end
         print(io, '\n')
+
+        # Check for duplicate segments
+        check_duplicates(io, samples, order, alnasms)
     end
     return result
 end
@@ -214,3 +220,68 @@ pass(x::Influenza.ErrorLateStop, is_illumina::Bool) = true
 # can give enough reads to reconstruct a segment.
 # If more than 500 bp have lower than 25 depth, we can't trust it.
 pass(x::Influenza.ErrorLowDepthBases, is_illumina::Bool) = x.n < 500
+
+function check_duplicates(
+    io::IO,
+    samples::Vector{Sample},
+    order::Vector{Vector{UInt8}},
+    alnasms::Vector{Vector{AlignedAssembly}},
+)
+    pairs = check_duplicates(samples, order, alnasms)
+    isempty(pairs) && return nothing
+    println(io, "Duplicate segments (> 99.5% identity)")
+    for (segment, v) in sort!(collect(pairs), by=first)
+        println(io, segment)
+        for ((s1, ord1), (s2, ord2), id) in v
+            println(io, "\t$s1 ($ord1)\t$s2 ($ord2)\t$(@sprintf "%.3f" id)")
+        end
+        println(io)
+    end
+end
+
+function check_duplicates(
+    samples::Vector{Sample},
+    order::Vector{Vector{UInt8}},
+    alnasms::Vector{Vector{AlignedAssembly}}
+   # vector of: (segment, [((sample1, ord), (sample2, ord), id) ... ]
+)::Dict{Segment, Vector{Tuple{Tuple{Sample, UInt8}, Tuple{Sample, UInt8}, Float64}}}
+    bysegment = Dict{Segment, Vector{Tuple{Sample, UInt8, LongDNASeq, KMerSet}}}()
+    for (sample, orders, va) in zip(samples, order, alnasms), (ord, alnasm) in zip(orders, va)
+        seq = alnasm.assembly.seq
+        tup = (sample, ord, seq, kmerset(seq))
+        push!(get!(valtype(bysegment), bysegment, alnasm.reference.segment), tup)
+    end
+
+    result = Dict{Segment, Vector{Tuple{Tuple{Sample, UInt8}, Tuple{Sample, UInt8}, Float64}}}()
+    for (segment, v) in bysegment
+        for i in 1:length(v)-1, j in i+1:length(v)
+            seqa, seqb = v[i][3], v[j][3]
+            len1, len2 = minmax(length(seqa), length(seqb))
+            len1 / len2 < 0.8 && continue
+            overlap(v[i][4], v[j][4]) > 0.8 || continue
+            id = alnid(seqa, seqb)
+            id > 0.995 || continue
+            element = ((v[i][1], v[i][2]), (v[j][1], v[j][2]), id)
+            push!(get!(valtype(result), result, segment), element)
+        end
+    end
+    return result
+end
+
+function kmerset(seq::LongDNASeq)::KMerSet
+    Set(canonical(mer) for mer in each(DNAMer{16}, seq))
+end
+
+function overlap(a::T, b::T) where {T <: Set{<:DNAMer}}
+    length(intersect(a, b)) / min(length(a), length(b))
+end
+
+function alnid(a::LongDNASeq, b::LongDNASeq)::Float64
+    # This is never nothing because we assume the alignment doesnt fail
+    aln = BioAlignments.alignment(
+        pairalign(OverlapAlignment(), a, b, DEFAULT_DNA_ALN_MODEL)
+    )::BioAlignments.PairwiseAlignment
+    # And this is only nothing if the identity is very low, but we already
+    # checked with kmer overlap, so this should never happen
+    Influenza.alignment_identity(OverlapAlignment(), aln)::Float64
+end

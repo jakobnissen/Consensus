@@ -8,9 +8,10 @@ generally useful functions.
 module Consensus
 
 using FASTX: FASTA
-using BioSequences: LongDNASeq, DNA, isgap
+using BioSequences: LongDNASeq, DNA, isgap, each, canonical, DNAMer
+using BioAlignments: BioAlignments, OverlapAlignment, pairalign
 using ErrorTypes: Option, some, none, unwrap, unwrap_or, @unwrap_or, and_then, map_or, is_error
-using Influenza: Influenza, Sample, Segment, Assembly, Reference, AlignedAssembly, Protein
+using Influenza: Influenza, Sample, Segment, Assembly, Reference, AlignedAssembly, Protein, DEFAULT_DNA_ALN_MODEL
 using KMATools: KMATools
 using Printf: @sprintf
 using CodecZlib: GzipDecompressorStream, GzipCompressorStream
