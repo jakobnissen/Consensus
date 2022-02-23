@@ -29,8 +29,9 @@ function snakemake_entrypoint(
     foreach(zip(aln_asms, paths)) do (alnasmv, path)
         convergence_check(alnasmv, path.convergence)
     end
-    depths = map(zip(aln_asms, paths)) do (alnasmv, path)
-        load_depths_and_errors(alnasmv, path.t_depth, path.a_depth)
+    depths = Vector{Vector{Depths}}(undef, length(aln_asms))
+    Threads.@threads for i in 1:length(depths)
+        depths[i] = load_depths_and_errors(aln_asms[i], paths[i].t_depth, paths[i].a_depth)
     end
     segmentorder = map(i -> order_alnasms(i...), zip(aln_asms, depths))
 
@@ -68,19 +69,19 @@ function report(
     read_stats::Vector{<:ReadStats},
     is_illumina::Bool,
 )::Vector{Vector{Bool}}
-    result = Vector{Bool}[]
+    passed = Vector{Bool}[]
     open(report_path, "w") do io
         # Print report for each segment
         for i in eachindex(samples)
             v = report(io, samples[i], order[i], alnasms[i], depths[i], read_stats[i], is_illumina)
-            push!(result, v)
+            push!(passed, v)
         end
         print(io, '\n')
 
         # Check for duplicate segments
-        check_duplicates(io, samples, order, alnasms)
+        check_duplicates(io, samples, order, alnasms, passed)
     end
-    return result
+    return passed
 end
 
 function report(
@@ -226,46 +227,102 @@ function check_duplicates(
     samples::Vector{Sample},
     order::Vector{Vector{UInt8}},
     alnasms::Vector{Vector{AlignedAssembly}},
+    passed::Vector{Vector{Bool}}
 )
-    pairs = check_duplicates(samples, order, alnasms)
-    isempty(pairs) && return nothing
-    println(io, "Duplicate segments (> 99.5% identity)")
-    for (segment, v) in sort!(collect(pairs), by=first)
-        println(io, segment)
-        for ((s1, ord1), (s2, ord2), id) in v
-            println(io, "\t$s1 ($ord1)\t$s2 ($ord2)\t$(@sprintf "%.3f" id)")
+    kmers = map(zip(alnasms, passed)) do (av, pv)
+        map(zip(av, pv)) do (a, p)
+            p ? kmerset(a.assembly.seq) : nothing
         end
-        println(io)
+    end
+    println(io, "Possibly duplicated samples:")
+    for i in 1:length(kmers)-1, j in i+1:length(kmers)
+        check_duplicates(io,
+            samples[i], samples[j],
+            order[i], order[j],
+            alnasms[i], alnasms[j],
+            passed[i], passed[j],
+            kmers[i], kmers[j]
+        )
     end
 end
 
 function check_duplicates(
-    samples::Vector{Sample},
-    order::Vector{Vector{UInt8}},
-    alnasms::Vector{Vector{AlignedAssembly}}
-   # vector of: (segment, [((sample1, ord), (sample2, ord), id) ... ]
-)::Dict{Segment, Vector{Tuple{Tuple{Sample, UInt8}, Tuple{Sample, UInt8}, Float64}}}
-    bysegment = Dict{Segment, Vector{Tuple{Sample, UInt8, LongDNASeq, KMerSet}}}()
-    for (sample, orders, va) in zip(samples, order, alnasms), (ord, alnasm) in zip(orders, va)
-        seq = alnasm.assembly.seq
-        tup = (sample, ord, seq, kmerset(seq))
-        push!(get!(valtype(bysegment), bysegment, alnasm.reference.segment), tup)
-    end
+    io::IO,
+    sample1::Sample, sample2::Sample,
+    order1::Vector{<:Integer}, order2::Vector{<:Integer},
+    alnasms1::Vector{AlignedAssembly}, alnasms2::Vector{AlignedAssembly},
+    passed1::Vector{Bool}, passed2::Vector{Bool},
+    kmers1::Vector{<:Union{Nothing, KMerSet}}, kmers2::Vector{<:Union{Nothing, KMerSet}}
+)
+    # Get a list of Bool for each segment, true if at least one segcopy
+    # from both samples were passed.
+    seg_passed = map(&,
+        segments_passed(passed1, alnasms1),
+        segments_passed(passed2, alnasms2)
+    )
+    n_possible_dup = sum(seg_passed, init=0)
 
-    result = Dict{Segment, Vector{Tuple{Tuple{Sample, UInt8}, Tuple{Sample, UInt8}, Float64}}}()
-    for (segment, v) in bysegment
-        for i in 1:length(v)-1, j in i+1:length(v)
-            seqa, seqb = v[i][3], v[j][3]
-            len1, len2 = minmax(length(seqa), length(seqb))
-            len1 / len2 < 0.8 && continue
-            overlap(v[i][4], v[j][4]) > 0.8 || continue
-            id = alnid(seqa, seqb)
-            id > 0.995 || continue
-            element = ((v[i][1], v[i][2]), (v[j][1], v[j][2]), id)
-            push!(get!(valtype(result), result, segment), element)
-        end
+    # We consider at least 2 duplicate segments as a duplicate sample, so if at most
+    # 1 segment passed in both samples, we can quit early
+    n_possible_dup < 2 && return nothing
+    segments_dup = fill(false, N_SEGMENTS)
+
+    pairs = Vector{Tuple{Segment, Float64, UInt8, UInt8}}()
+    for i in 1:length(alnasms1), j in 1:length(alnasms2)
+        # Only compare passed segcopies
+        (passed1[i] & passed2[j]) || continue
+        segment = alnasms1[i].reference.segment
+
+        # Of course only compare segcopies of the same segment
+        segment == alnasms2[j].reference.segment || continue
+        (seq1, seq2) = alnasms1[i].assembly.seq, alnasms2[j].assembly.seq
+        len1, len2 = minmax(length(seq1), length(seq2))
+
+        # If the lengths are more than 25% different, they are surely not
+        # identical. We do expect some length difference due to primers and such
+        len1 / len2 > 0.75 || continue
+        k1 = kmers1[i]::KMerSet
+        k2 = kmers2[j]::KMerSet
+
+        # The kmer overlap is an inaccurate, but faster way to check for similarity.
+        # we use it here to quickly discard pairs which are clearly too different to
+        # avoid having to compute an actual alignment
+        overlap(k1, k2) ≥ 0.8 || continue
+        id = alnid(seq1, seq2)
+
+        # We consider 99.5% identity or above to be the same sequence
+        id ≥ 0.995 || continue
+        segments_dup[Integer(segment) + 0x01] = true
+        push!(pairs, (segment, id, order1[i], order2[j]))
     end
-    return result
+    n_dup = sum(segments_dup, init=0)
+    @assert n_possible_dup ≥ n_dup
+
+    # At least two segments must be the same, and at least half the passed segments
+    if n_dup < 2 || n_dup < fld(n_possible_dup, 2)
+        return nothing
+    end
+    sort!(pairs, by=first)
+    println(io, sample1, ' ', sample2, ": ", n_dup, '/', n_possible_dup, " segments")
+    for (segment, id, ord1, ord2) in pairs
+        println(io, '\t',
+            rpad(segment, 3),
+            " (", ord1, ") (", ord2, ") ",
+            (@sprintf "%.3f" id)
+        )
+    end
+    println(io)
+end
+
+function segments_passed(
+    passed::Vector{Bool},
+    alnasms::Vector{AlignedAssembly}
+)::NTuple{N_SEGMENTS, Bool}
+    v = fill(false, N_SEGMENTS)
+    for (a, p) in zip(alnasms, passed)
+        v[Integer(a.reference.segment) + 0x01] |= p
+    end
+    NTuple{N_SEGMENTS}(v)
 end
 
 function kmerset(seq::LongDNASeq)::KMerSet
