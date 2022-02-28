@@ -189,6 +189,10 @@ function main(
         println(stderr, "Existing:", "\n\t", join(("$(a.name) $(a.identity)" for a in assemblies), "\n\t"))
 
         # Break if possible
+        if isempty(assemblies)
+            convergence = nothing
+            break
+        end
         is_converged, convergence = has_converged(assemblies, dedup_segments, convergence_threshold)
         if is_converged || iter ≥ MAX_ITERS
             break
@@ -198,6 +202,7 @@ function main(
     # Write convergence report
     open(joinpath(outdir, "convergence.tsv"), "w") do io
         println(io, "template\tsegment\tisconverged\tid")
+        convergence === nothing && return nothing
         for i in convergence
             println(io,
                 i.template, '\t',
