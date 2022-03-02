@@ -28,11 +28,11 @@ function make_depth_plot(v::Vector{<:Tuple{Segment, Vector{<:Unsigned}}})
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    if length(ARGS) != 3
-        println("Usage: julia report.jl platform out_dir ref_dir")
+    if length(ARGS) != 4
+        println("Usage: julia report.jl platform selfsimilar out_dir ref_dir")
         exit(1)
     end
-    platform, outdir, refdir = ARGS
+    platform, similar_str, outdir, refdir = ARGS
     illumina = if platform == "illumina"
         true
     elseif platform == "nanopore"
@@ -42,13 +42,15 @@ if abspath(PROGRAM_FILE) == @__FILE__
         exit(1)
     end
 
+    similar = parse(Bool, similar_str)
+
     reportpath = joinpath(outdir, "report_consensus.txt")
     tmpdir = joinpath(outdir, "tmp")
     alndir = joinpath(tmpdir, "aln")
     consdir = joinpath(outdir, "sequences")
     plotdir = joinpath(outdir, "depths")
     
-    Consensus.snakemake_entrypoint(reportpath, refdir, alndir, consdir, tmpdir, illumina)
+    Consensus.snakemake_entrypoint(reportpath, refdir, alndir, consdir, tmpdir, illumina, similar)
 
     bysample = Dict(Sample(dirname) => Tuple{Segment, Consensus.Depths}[] for dirname in readdir(alndir))
     data = open(GzipDecompressorStream, joinpath(tmpdir, "internal.jls.gz")) do io

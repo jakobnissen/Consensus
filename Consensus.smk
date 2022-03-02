@@ -11,6 +11,15 @@ JULIA_COMMAND = f"JULIA_LOAD_PATH='{SNAKEDIR}' julia --startup-file=no"
 ######################################################
 # GLOBAL CONSTANTS
 ######################################################
+KNOWN_CONFIGS = {'readdir', 'platform', 'pore', 'ref', 'selfsimilar'}
+for key in config:
+    if key not in KNOWN_CONFIGS:
+        raise KeyError(
+            f"Config \"{key}\" is not a known Consensus pipeline config. "
+            "Check spelling. Known configs are: "
+            f"{','.join(KNOWN_CONFIGS)}"
+        )
+
 def abspath(x):
     return os.path.abspath(os.path.expanduser(x))
 
@@ -57,6 +66,20 @@ else:
 SAMPLENAMES = sorted(READS.keys())
 
 REFOUTDIR = os.path.join(REFDIR, "refout")
+
+# If selfsimilar, skip the self-similarity check during report creation.
+# If samples are very self-similar, this check takes a long time, is redundant,
+# and spams the report.
+if "selfsimilar" in config:
+    v = config["selfsimilar"]
+    if v in ["true", "True"]:
+        SELF_SIMILAR = True
+    elif v in ["false", "False"]:
+        SELF_SIMILAR = False
+    else:
+        raise KeyError(f"selfsimilar must be true or false, not \"{v}\"")
+else:
+    SELF_SIMILAR = False
 
 # We have to create this directories either in a rule or outside the DAG to not
 # mess up the DAG.
@@ -257,9 +280,10 @@ rule create_report:
         juliacmd=JULIA_COMMAND,
         scriptpath=f"{SNAKEDIR}/scripts/report.jl",
         refdir=REFDIR,
-        platform='illumina' if IS_ILLUMINA else 'nanopore'
+        platform='illumina' if IS_ILLUMINA else 'nanopore',
+        similar=int(SELF_SIMILAR)
     log: "tmp/log/report_consensus.txt"
     threads: workflow.cores
     shell: 
         "{params.juliacmd} -t {threads} {params.scriptpath:q} "
-        "{params.platform} . {params.refdir:q} > {log}"
+        "{params.platform} {params.similar} . {params.refdir:q} > {log}"

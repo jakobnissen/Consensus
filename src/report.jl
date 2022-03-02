@@ -7,6 +7,7 @@ function snakemake_entrypoint(
     seq_dir::AbstractString,
     tmp_dir::AbstractString,
     is_illumina::Bool,
+    similar::Bool,
 )::Nothing
     samples = map(Sample, sort!(readdir(aln_dir)))
     paths = map(samples) do sample
@@ -43,7 +44,7 @@ function snakemake_entrypoint(
         segmentorder[i] = segmentorder[i][ord]
     end
 
-    passes = report(report_path, samples, segmentorder, aln_asms, depths, read_stats, is_illumina)
+    passes = report(report_path, samples, segmentorder, aln_asms, depths, read_stats, is_illumina, similar)
 
     for (p, alnasmv, pass, sorder) in zip(paths, aln_asms, passes, segmentorder)
         write_sequences(p.seq_dir, p.sample, alnasmv, pass, sorder)
@@ -68,6 +69,7 @@ function report(
     depths::Vector{Vector{Depths}},
     read_stats::Vector{<:ReadStats},
     is_illumina::Bool,
+    similar::Bool,
 )::Vector{Vector{Bool}}
     passed = Vector{Bool}[]
     open(report_path, "w") do io
@@ -79,7 +81,9 @@ function report(
         print(io, '\n')
 
         # Check for duplicate segments
-        check_duplicates(io, samples, order, alnasms, passed)
+        if !similar
+            check_duplicates(io, samples, order, alnasms, passed)
+        end
     end
     return passed
 end
