@@ -335,7 +335,9 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
         return naively_better
     end
 
-    aln = alignment(pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL))
+    aln = alignment(
+        pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL)
+    )::PairwiseAlignment
     id = alignment_identity(OverlapAlignment(), aln)
 
     # This can happen if they are just too dissimilar
@@ -437,7 +439,7 @@ function parse_fna(
             header = FASTA.header(record)::AbstractString
             row = res_by_header[header]
             depths = depths_by_header[header]
-            name = String(strip(FASTA.header(record)))
+            name = String(strip(header))
             segment = ref_dict[name].segment
             seq = FASTA.sequence(LongDNASeq, record)
             
