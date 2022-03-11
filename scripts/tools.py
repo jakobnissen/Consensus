@@ -15,7 +15,7 @@ def get_read_pairs(directory):
     # See Illumina's "Naming convention" documentation.
     # Currently, this logic does not take multiple lanes into account: We assume
     # only lane 1 is used.
-    PATTERN = r"(.+)_S(\d+)_L001_R([12])_001\.fastq\.gz"
+    PATTERN = r"(.+)_S(\d+)_L001_R([12])_001\.fastq(\.gz)?"
     pattern = re.compile(PATTERN)
 
     reads = dict()
@@ -27,7 +27,9 @@ def get_read_pairs(directory):
                 " Are you sure it is an Illumina FASTQ file?")
                 )
 
-        samplename, samplenumber, readnumber = match.groups()
+        samplename, samplenumber_str, readnumber_str, *_gz = match.groups()
+        samplenumber = int(samplenumber_str)
+        readnumber = int(readnumber_str)
 
         # Samplenumber 0 are the undetermined reads, always. These cannot meaningfully
         # be worked with.
@@ -35,10 +37,16 @@ def get_read_pairs(directory):
             continue
 
         if samplename not in reads:
-            reads[samplename] = []
-        reads[samplename].append(os.path.join(directory, filename))
+            reads[samplename] = [None, None]
+        elif reads[samplename][readnumber - 1] is not None:
+            raise ValueError(
+                f"Read \"{samplename}\" number {readnumber} seems to be "
+                "present multiple times."
+            )
 
-    singletons = [v for v in reads.values() if len(v) != 2]
+        reads[samplename][readnumber - 1] = os.path.join(directory, filename)
+
+    singletons = [next(filter(None, v)) for v in reads.values() if None in v]
     if len(singletons) > 0:
         print("Non-paired read files")
         for group in singletons:
@@ -65,6 +73,9 @@ def get_nanopore_reads(directory):
                 reads[filename[:-len(ending)]] = os.path.join(directory, filename)
                 break
         else: # no break
-            raise ValueError(f"File {filename} is not named like a FASTQ file.")
+            raise ValueError(
+                f"File {filename} is not named like a FASTQ file. "
+                "It should end in '.fastq' or '.fq', and optionally gzipped ('.gz' ending)"
+            )
     
     return reads
