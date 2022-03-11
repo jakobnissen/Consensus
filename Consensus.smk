@@ -11,6 +11,7 @@ JULIA_COMMAND = f"JULIA_LOAD_PATH='{SNAKEDIR}' julia --startup-file=no"
 ######################################################
 # GLOBAL CONSTANTS
 ######################################################
+# We accept "pore" for backwards compatibility.
 KNOWN_CONFIGS = {'readdir', 'platform', 'pore', 'ref', 'selfsimilar'}
 for key in config:
     if key not in KNOWN_CONFIGS:
@@ -47,13 +48,6 @@ if "platform" not in config or config["platform"] not in ["illumina", "nanopore"
 IS_NANOPORE = config["platform"] == "nanopore"
 IS_ILLUMINA = config["platform"] == "illumina"
 assert IS_NANOPORE ^ IS_ILLUMINA # only one must be true at a time
-
-if IS_NANOPORE:
-    if "pore" not in config:
-        raise KeyError("On nanopore platform, you must supply pore: --config pore=9/10")
-    if str(config["pore"]) not in ["9", "10"]:
-        raise ValueError(f"Pore must be 9 or 10, not '{config['pore']}'")
-    PORE = str(config["pore"])
 
 # Pass in the reference directory
 if "ref" not in config:
