@@ -20,6 +20,11 @@ for key in config:
             f"{','.join(KNOWN_CONFIGS)}"
         )
 
+# Appalingly, Snakemake automatically converts input strings to int/float
+# if they are parseable as such. Convert them back to strings
+for (k, v) in config.items():
+    config[k] = str(v)
+
 def abspath(x):
     return os.path.abspath(os.path.expanduser(x))
 
