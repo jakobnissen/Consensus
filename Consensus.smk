@@ -71,14 +71,14 @@ REFOUTDIR = os.path.join(REFDIR, "refout")
 # and spams the report.
 if "selfsimilar" in config:
     v = config["selfsimilar"]
-    if v in ["true", "True"]:
+    if v.lower() == "true":
         SELF_SIMILAR = True
-    elif v in ["false", "False"]:
+    elif v.lower() == "false":
         SELF_SIMILAR = False
     else:
         raise KeyError(f"selfsimilar must be true or false, not \"{v}\"")
 else:
-    SELF_SIMILAR = False
+    SELF_SIMILAR = True
 
 # We have to create this directories either in a rule or outside the DAG to not
 # mess up the DAG.
