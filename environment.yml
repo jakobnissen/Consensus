@@ -7,3 +7,4 @@ dependencies:
   - fastp=0.20.1
   - kma=1.3.27
   - snakemake=6.6.1
+  - python=3.10.2
