@@ -52,7 +52,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     
     Consensus.snakemake_entrypoint(reportpath, refdir, alndir, consdir, tmpdir, illumina, similar)
 
-    bysample = Dict(Sample(dirname) => Tuple{Segment, Consensus.Depths}[] for dirname in readdir(alndir))
+    bysample = Dict(
+        Sample(name) => Tuple{Segment, Consensus.Depths}[]
+        for name in readdir(alndir) if !startswith(name, '.')
+    )
     data = open(GzipDecompressorStream, joinpath(tmpdir, "internal.jls.gz")) do io
         deserialize(io)
     end

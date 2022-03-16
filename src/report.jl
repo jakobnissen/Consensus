@@ -9,7 +9,7 @@ function snakemake_entrypoint(
     is_illumina::Bool,
     similar::Bool,
 )::Nothing
-    samples = map(Sample, sort!(readdir(aln_dir)))
+    samples = map(Sample, sort!(filter!(i -> !startswith(i, '.'), readdir(aln_dir))))
     paths = map(samples) do sample
         name = nameof(sample)
         (;
