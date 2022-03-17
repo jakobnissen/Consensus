@@ -34,12 +34,12 @@ function get_templates(
         # Coverage is most critical: Without it, it's impossible to even make an
         # alignment in the first place. But we can't expect more than around 90%
         # due to deletions, or spurious termini in references etc.
-        if min(x.tcov, than.tcov) < 0.9
+        if min(x.tcov, than.tcov) < 0.85
             return x.tcov < than.tcov
         # Why is identity important? Not sure it needs to be here, but a bad ref
         # could get higher depth due to crossmapping from another segment, e.g. at
         # termini. This factor is small if identity is sufficiently high
-        elseif min(x.tid, than.tid) < 0.85
+        elseif min(x.tid, than.tid) < 0.75
             return x.tid < than.tid
         # If coverage and id is OK, depth is the most important factor, since
         # this is what determines what the majority (consensus) variant is.
