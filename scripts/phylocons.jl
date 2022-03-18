@@ -12,11 +12,13 @@ using Influenza: Influenza
 using ErrorTypes: unwrap
 using FASTX: FASTA
 
-function main(rundir::AbstractString)
-    isdir(rundir) || error("No such directory: \"$rundir\"")
-    outdir = joinpath(rundir, "phyloseqs")
+function main(
+    internal_path::AbstractString, # path of internal.jls.gz object
+    outdir::AbstractString # directory to create
+)
+    isdir(dirname(realpath(outdir))) || error("Parent directory of output does not exist")
     ispath(outdir) && error("Output path exists: \"$outdir\"")
-    internal = Consensus.load_internal(joinpath(rundir, "tmp", "internal.jls.gz"))
+    internal = Consensus.load_internal(internal_path)
     inds = Consensus.pick_with_preset(i -> i.passed, internal)
     if inds === nothing
         return nothing
@@ -46,10 +48,10 @@ function dump_phyloseqs(outdir::AbstractString, picked::Vector{INTERNAL_TYPE})
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    if length(ARGS) != 1
-        error("Usage: julia consensus_run_dir")
+    if length(ARGS) != 2
+        error("Usage: julia internal_jls_path outdir")
     end
-    main(first(ARGS))
+    main(ARGS...)
 end
 
 end # module
