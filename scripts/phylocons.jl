@@ -16,7 +16,8 @@ function main(
     internal_path::AbstractString, # path of internal.jls.gz object
     outdir::AbstractString # directory to create
 )
-    isdir(dirname(realpath(outdir))) || error("Parent directory of output does not exist")
+    parent = dirname(rstrip(rstrip(outdir, '/'), '\\'))
+    (isempty(parent) || isdir(parent)) || error("Parent directory of output does not exist")
     ispath(outdir) && error("Output path exists: \"$outdir\"")
     internal = Consensus.load_internal(internal_path)
     inds = Consensus.pick_with_preset(i -> i.passed, internal)
