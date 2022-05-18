@@ -6,7 +6,7 @@ SNAKEDIR = os.path.dirname(workflow.snakefile)
 sys.path.append(os.path.join(SNAKEDIR, "scripts"))
 import tools
 
-JULIA_COMMAND = f"JULIA_LOAD_PATH='{SNAKEDIR}' julia --startup-file=no"
+JULIA_COMMAND = f"julia --project='{SNAKEDIR}' --startup-file=no"
 
 ######################################################
 # GLOBAL CONSTANTS
