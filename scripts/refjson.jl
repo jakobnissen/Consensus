@@ -6,10 +6,7 @@ using Consensus: Consensus, INTERNAL_TYPE
 using Influenza: Influenza
 using ErrorTypes: unwrap
 
-function main(
-    inpath::AbstractString,
-    outpath::AbstractString
-)
+function main(inpath::AbstractString, outpath::AbstractString)
     isfile(outpath) && error("File exists: \"$outpath\"")
     internal = Consensus.load_internal(inpath)
     inds = Consensus.pick_with_preset(i -> i.passed && i.order == 1, internal)
@@ -27,17 +24,9 @@ function Influenza.Reference(x::INTERNAL_TYPE)
         x.order == 0x01 ? s : s * "_$(x.order)"
     end
     proteins = map(x.alnasm.proteins) do protein
-        Influenza.ReferenceProtein(
-            protein.variant,
-            unwrap(protein.orfs)
-        )
+        Influenza.ReferenceProtein(protein.variant, unwrap(protein.orfs))
     end
-    Influenza.Reference(
-        name,
-        x.alnasm.reference.segment,
-        x.alnasm.assembly.seq,
-        proteins
-    )
+    Influenza.Reference(name, x.alnasm.reference.segment, x.alnasm.assembly.seq, proteins)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

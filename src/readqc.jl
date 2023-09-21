@@ -1,7 +1,6 @@
 const ReadStats = NamedTuple{(:bp, :frac_bp_kept, :mean_read_len, :frac_q20, :frac_q30)}
 
-function check_reads(path::AbstractString
-)::ReadStats
+function check_reads(path::AbstractString)::ReadStats
     obj = open(JSON3.read, path)
 
     bp::Int = obj[:summary][:after_filtering][:total_bases]

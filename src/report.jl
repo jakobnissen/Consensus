@@ -19,14 +19,12 @@ function snakemake_entrypoint(
             convergence=joinpath(aln_dir, name, "convergence.tsv"),
             t_depth=joinpath(aln_dir, name, "kma_1.mat.gz"),
             a_depth=joinpath(aln_dir, name, "kma_final.mat.gz"),
-            seq_dir=joinpath(seq_dir, name)
+            seq_dir=joinpath(seq_dir, name),
         )
     end
     read_stats = map(p -> check_reads(p.fastp), paths)
-    aln_asms = load_aligned_assemblies(
-        [s.asm for s in paths],
-        joinpath(ref_dir, "refs.json")
-    )
+    aln_asms =
+        load_aligned_assemblies([s.asm for s in paths], joinpath(ref_dir, "refs.json"))
     foreach(zip(aln_asms, paths)) do (alnasmv, path)
         convergence_check(alnasmv, path.convergence)
     end
@@ -38,13 +36,24 @@ function snakemake_entrypoint(
 
     # Re-order the vectors based on segment and order.
     for i in eachindex(aln_asms, depths, segmentorder)
-        ord = sortperm([(a.reference.segment, o) for (a, o) in zip(aln_asms[i], segmentorder[i])])
+        ord = sortperm([
+            (a.reference.segment, o) for (a, o) in zip(aln_asms[i], segmentorder[i])
+        ])
         aln_asms[i] = aln_asms[i][ord]
         depths[i] = depths[i][ord]
         segmentorder[i] = segmentorder[i][ord]
     end
 
-    passes = report(report_path, samples, segmentorder, aln_asms, depths, read_stats, is_illumina, similar)
+    passes = report(
+        report_path,
+        samples,
+        segmentorder,
+        aln_asms,
+        depths,
+        read_stats,
+        is_illumina,
+        similar,
+    )
 
     for (p, alnasmv, pass, sorder) in zip(paths, aln_asms, passes, segmentorder)
         write_sequences(p.seq_dir, p.sample, alnasmv, pass, sorder)
@@ -75,7 +84,15 @@ function report(
     open(report_path, "w") do io
         # Print report for each segment
         for i in eachindex(samples)
-            v = report(io, samples[i], order[i], alnasms[i], depths[i], read_stats[i], is_illumina)
+            v = report(
+                io,
+                samples[i],
+                order[i],
+                alnasms[i],
+                depths[i],
+                read_stats[i],
+                is_illumina,
+            )
             push!(passed, v)
         end
         print(io, '\n')
@@ -112,7 +129,7 @@ function report(
             push!(aux, (a, d, o))
         end
     end
-    sort!(aux, by=i -> first(i).reference.segment)
+    sort!(aux; by=i -> first(i).reference.segment)
 
     # Sample header
     println(io, sample)
@@ -126,10 +143,7 @@ function report(
             alnasm, _ = data
             passes[indexof[alnasm]] = pass
         end
-        print(io,
-            '\t', pass ? "     " : "FAIL ",
-            rpad(string(segment) * ":", 4),
-        )
+        print(io, '\t', pass ? "     " : "FAIL ", rpad(string(segment) * ":", 4))
         write(io, take!(buf))
     end
 
@@ -141,9 +155,11 @@ function report(
             alnasm, depth, order = i
             _, pass = report_segment((alnasm, depth), is_illumina)
             segment = alnasm.reference.segment
-            print(io,
-                "\t", pass ? "     " : "FAIL ",
-                rpad(string(segment), 3) * ' ' * string(order) * ':'
+            print(
+                io,
+                "\t",
+                pass ? "     " : "FAIL ",
+                rpad(string(segment), 3) * ' ' * string(order) * ':',
             )
             print_segment_header(io, alnasm, depth)
             passes[indexof[alnasm]] = pass
@@ -155,7 +171,8 @@ function report(
 end
 
 function report_segment(
-    data::Union{Tuple{AlignedAssembly, Depths}, Nothing}, is_illumina::Bool
+    data::Union{Tuple{AlignedAssembly, Depths}, Nothing},
+    is_illumina::Bool,
 )::Tuple{IOBuffer, Bool}
     buf = IOBuffer()
     passed = true
@@ -171,7 +188,7 @@ function report_segment(
     # or coverage is < 0.75
     critical_errors = filter(alnasm.errors) do error
         (error isa Influenza.ErrorLowDepthBases && error.n > 500) ||
-        (error isa Influenza.ErrorLowCoverage && error.coverage < 0.75)
+            (error isa Influenza.ErrorLowCoverage && error.coverage < 0.75)
     end
     if !isempty(critical_errors)
         println(buf, "\t\tERROR ", first(critical_errors))
@@ -208,7 +225,10 @@ end
 
 function print_segment_header(io::IO, alnasm::AlignedAssembly, depth::Depths)
     print(io, " Identity $(@sprintf "%.3f" (alnasm.identity)),")
-    println(io, " depth $(@sprintf "%.2e" assembly_depth(depth)), coverage $(@sprintf "%.3f" template_coverage(depth))")
+    println(
+        io,
+        " depth $(@sprintf "%.2e" assembly_depth(depth)), coverage $(@sprintf "%.3f" template_coverage(depth))",
+    )
 end
 
 # fallback: segment errors fails
@@ -217,8 +237,12 @@ pass(::Influenza.InfluenzaError, is_illumina::Bool) = false
 # Seems weird, but NA stalk can have 75 bp without any problems
 pass(x::Influenza.ErrorIndelTooBig, _::Bool) = length(x.indel) < 100
 pass(x::Influenza.ErrorEarlyStop, _::Bool) = x.observed_naa + 14 > x.expected_naa
-pass(x::Influenza.ErrorInsignificant, is_illumina::Bool) = x.n_insignificant < ifelse(is_illumina, 5, 25)
-pass(x::Influenza.ErrorAmbiguous, is_illumina::Bool) = x.n_ambiguous < ifelse(is_illumina, 5, 25)
+function pass(x::Influenza.ErrorInsignificant, is_illumina::Bool)
+    x.n_insignificant < ifelse(is_illumina, 5, 25)
+end
+function pass(x::Influenza.ErrorAmbiguous, is_illumina::Bool)
+    x.n_ambiguous < ifelse(is_illumina, 5, 25)
+end
 pass(x::Influenza.ErrorLateStop, is_illumina::Bool) = true
 
 # We fail with low depth because cross-contamination from other samples
@@ -231,7 +255,7 @@ function check_duplicates(
     samples::Vector{Sample},
     order::Vector{Vector{UInt8}},
     alnasms::Vector{Vector{AlignedAssembly}},
-    passed::Vector{Vector{Bool}}
+    passed::Vector{Vector{Bool}},
 )
     kmers = map(zip(alnasms, passed)) do (av, pv)
         map(zip(av, pv)) do (a, p)
@@ -239,32 +263,41 @@ function check_duplicates(
         end
     end
     println(io, "Possibly duplicated samples:")
-    for i in 1:length(kmers)-1, j in i+1:length(kmers)
-        check_duplicates(io,
-            samples[i], samples[j],
-            order[i], order[j],
-            alnasms[i], alnasms[j],
-            passed[i], passed[j],
-            kmers[i], kmers[j]
+    for i in 1:(length(kmers) - 1), j in (i + 1):length(kmers)
+        check_duplicates(
+            io,
+            samples[i],
+            samples[j],
+            order[i],
+            order[j],
+            alnasms[i],
+            alnasms[j],
+            passed[i],
+            passed[j],
+            kmers[i],
+            kmers[j],
         )
     end
 end
 
 function check_duplicates(
     io::IO,
-    sample1::Sample, sample2::Sample,
-    order1::Vector{<:Integer}, order2::Vector{<:Integer},
-    alnasms1::Vector{AlignedAssembly}, alnasms2::Vector{AlignedAssembly},
-    passed1::Vector{Bool}, passed2::Vector{Bool},
-    kmers1::Vector{<:Union{Nothing, KMerSet}}, kmers2::Vector{<:Union{Nothing, KMerSet}}
+    sample1::Sample,
+    sample2::Sample,
+    order1::Vector{<:Integer},
+    order2::Vector{<:Integer},
+    alnasms1::Vector{AlignedAssembly},
+    alnasms2::Vector{AlignedAssembly},
+    passed1::Vector{Bool},
+    passed2::Vector{Bool},
+    kmers1::Vector{<:Union{Nothing, KMerSet}},
+    kmers2::Vector{<:Union{Nothing, KMerSet}},
 )
     # Get a list of Bool for each segment, true if at least one segcopy
     # from both samples were passed.
-    seg_passed = map(&,
-        segments_passed(passed1, alnasms1),
-        segments_passed(passed2, alnasms2)
-    )
-    n_possible_dup = sum(seg_passed, init=0)
+    seg_passed =
+        map(&, segments_passed(passed1, alnasms1), segments_passed(passed2, alnasms2))
+    n_possible_dup = sum(seg_passed; init=0)
 
     # We consider at least 2 duplicate segments as a duplicate sample, so if at most
     # 1 segment passed in both samples, we can quit early
@@ -299,20 +332,26 @@ function check_duplicates(
         segments_dup[Integer(segment) + 0x01] = true
         push!(pairs, (segment, id, order1[i], order2[j]))
     end
-    n_dup = sum(segments_dup, init=0)
+    n_dup = sum(segments_dup; init=0)
     @assert n_possible_dup ≥ n_dup
 
     # At least two segments must be the same, and at least half the passed segments
     if n_dup < 2 || n_dup < fld(n_possible_dup, 2)
         return nothing
     end
-    sort!(pairs, by=first)
+    sort!(pairs; by=first)
     println(io, sample1, ' ', sample2, ": ", n_dup, '/', n_possible_dup, " segments")
     for (segment, id, ord1, ord2) in pairs
-        println(io, '\t',
+        println(
+            io,
+            '\t',
             rpad(segment, 3),
-            " (", ord1, ") (", ord2, ") ",
-            (@sprintf "%.3f" id)
+            " (",
+            ord1,
+            ") (",
+            ord2,
+            ") ",
+            (@sprintf "%.3f" id),
         )
     end
     println(io)
@@ -320,7 +359,7 @@ end
 
 function segments_passed(
     passed::Vector{Bool},
-    alnasms::Vector{AlignedAssembly}
+    alnasms::Vector{AlignedAssembly},
 )::NTuple{N_SEGMENTS, Bool}
     v = fill(false, N_SEGMENTS)
     for (a, p) in zip(alnasms, passed)
@@ -340,7 +379,7 @@ end
 function alnid(a::LongDNASeq, b::LongDNASeq)::Float64
     # This is never nothing because we assume the alignment doesnt fail
     aln = BioAlignments.alignment(
-        pairalign(OverlapAlignment(), a, b, DEFAULT_DNA_ALN_MODEL)
+        pairalign(OverlapAlignment(), a, b, DEFAULT_DNA_ALN_MODEL),
     )::BioAlignments.PairwiseAlignment
     # And this is only nothing if the identity is very low, but we already
     # checked with kmer overlap, so this should never happen

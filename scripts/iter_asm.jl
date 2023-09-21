@@ -21,7 +21,7 @@ that should be used.
 """
 function get_templates(
     res_path::AbstractString,
-    ref_dict::Dict{String, Reference} # name => ref
+    ref_dict::Dict{String, Reference}, # name => ref
 )::Vector{String}
     rows = open(io -> KMATools.parse_res(io, res_path), res_path)
     bysegment = Dict{Segment, Vector{eltype(rows)}}()
@@ -36,29 +36,30 @@ function get_templates(
         # due to deletions, or spurious termini in references etc.
         if min(x.tcov, than.tcov) < 0.85
             return x.tcov < than.tcov
-        # Why is identity important? Not sure it needs to be here, but a bad ref
-        # could get higher depth due to crossmapping from another segment, e.g. at
-        # termini. This factor is small if identity is sufficiently high
+            # Why is identity important? Not sure it needs to be here, but a bad ref
+            # could get higher depth due to crossmapping from another segment, e.g. at
+            # termini. This factor is small if identity is sufficiently high
         elseif min(x.tid, than.tid) < 0.75
             return x.tid < than.tid
-        # If coverage and id is OK, depth is the most important factor, since
-        # this is what determines what the majority (consensus) variant is.
+            # If coverage and id is OK, depth is the most important factor, since
+            # this is what determines what the majority (consensus) variant is.
         else
             return x.depth < than.depth
         end
     end
 
-    best = Dict(k => partialsort!(v, 1, lt=isworse, rev=true) for (k, v) in bysegment)
+    best = Dict(k => partialsort!(v, 1; lt=isworse, rev=true) for (k, v) in bysegment)
     # For the others (non-best), we have different criteria: We pick all hits
     # with id > 85%, cov > 90% and depth > 0.025 * highest_depth
-    highest_depth = Dict(k => first(sort(v, by=i -> i.depth, rev=true)) for (k,v) in bysegment)
+    highest_depth =
+        Dict(k => first(sort(v; by=i -> i.depth, rev=true)) for (k, v) in bysegment)
 
     result = [b.template for b in values(best)]
     for (segment, v) in bysegment
         vfilt = filter(v[2:end]) do row # exclude best segment at index 1
             row.tcov ≥ 0.90 &&
-            row.tid ≥ 0.85 &&
-            row.depth > max(10.0, 0.025 * highest_depth[segment].depth)
+                row.tid ≥ 0.85 &&
+                row.depth > max(10.0, 0.025 * highest_depth[segment].depth)
         end
         append!(result, [i.template for i in vfilt])
     end
@@ -68,7 +69,7 @@ end
 function dump_sequences(
     out_path::AbstractString,
     headers::Vector{String},
-    ref_dict::Dict{String, Reference}
+    ref_dict::Dict{String, Reference},
 )::Dict{String, LongDNASeq} # map of name => seq of all templates
     open(FASTA.Writer, out_path) do writer
         result = Dict{String, LongDNASeq}()
@@ -99,7 +100,7 @@ function main(
         error(
             "Sample \"$sample_name\" maps to no references.
             Several steps in the pipeline assume a nonempty reference set for each sample.
-            To continue, remove the following samples, delete the output, and rerun the pipeline."
+            To continue, remove the following samples, delete the output, and rerun the pipeline.",
         )
     end
     return dump_sequences(cat_path, templates, ref_dict)
@@ -152,7 +153,7 @@ function main(
     outdir::AbstractString,
     logdir::AbstractString,
     k::Int,
-    convergence_threshold::AbstractFloat # should be lower for Nanopore?
+    convergence_threshold::AbstractFloat, # should be lower for Nanopore?
 )
     local mapbase
     local convergence
@@ -183,17 +184,25 @@ function main(
 
         # Deduplicate input
         println(stderr, "Deduplicating iteration $iter...")
-        (assemblies, dedup_segments) = deduplicate(parse_fna(asm_path, res_path, mat_path, ref_dict))
+        (assemblies, dedup_segments) =
+            deduplicate(parse_fna(asm_path, res_path, mat_path, ref_dict))
         template_path = joinpath(outdir, "template_$(iter).fna")
-        old_seq_dict = save_deduplicated(template_path, assemblies, old_seq_dict, dedup_segments)
-        println(stderr, "Existing:", "\n\t", join(("$(a.name) $(a.identity)" for a in assemblies), "\n\t"))
+        old_seq_dict =
+            save_deduplicated(template_path, assemblies, old_seq_dict, dedup_segments)
+        println(
+            stderr,
+            "Existing:",
+            "\n\t",
+            join(("$(a.name) $(a.identity)" for a in assemblies), "\n\t"),
+        )
 
         # Break if possible
         if isempty(assemblies)
             convergence = nothing
             break
         end
-        is_converged, convergence = has_converged(assemblies, dedup_segments, convergence_threshold)
+        is_converged, convergence =
+            has_converged(assemblies, dedup_segments, convergence_threshold)
         if is_converged || iter ≥ MAX_ITERS
             break
         end
@@ -204,31 +213,30 @@ function main(
         println(io, "template\tsegment\tisconverged\tid")
         convergence === nothing && return nothing
         for i in convergence
-            println(io,
-                i.template, '\t',
-                i.segment, '\t',
-                i.isconverged, '\t',
-                round(i.identity, digits=4)
+            println(
+                io,
+                i.template,
+                '\t',
+                i.segment,
+                '\t',
+                i.isconverged,
+                '\t',
+                round(i.identity; digits=4),
             )
         end
     end
 
     # Finally, rename the last one to "final"
     for ext in (".aln", ".mat.gz", ".res")
-        cp(mapbase * ext, joinpath(outdir, "kma_final$(ext)"), force=true)
+        cp(mapbase * ext, joinpath(outdir, "kma_final$(ext)"); force=true)
     end
-    cp(template_path, joinpath(outdir, "kma_final.fsa"), force=true)
+    cp(template_path, joinpath(outdir, "kma_final.fsa"); force=true)
     cleanup(outdir, iter)
     return nothing
 end
 
-function index(
-    input::AbstractString,
-    outbase::AbstractString,
-    k::Int,
-    log::AbstractString
-)
-    run(pipeline(`kma index -nbp -k $k -i $input -o $outbase`, stderr=log))
+function index(input::AbstractString, outbase::AbstractString, k::Int, log::AbstractString)
+    run(pipeline(`kma index -nbp -k $k -i $input -o $outbase`; stderr=log))
 end
 
 function kma_illumina(
@@ -236,11 +244,11 @@ function kma_illumina(
     inrv::AbstractString,
     outbase::AbstractString,
     db::AbstractString,
-    log::AbstractString
+    log::AbstractString,
 )
     cmd = `kma -ipe $infw $inrv -o $outbase -t_db $db
     -t $(Threads.nthreads()) -1t1 -mrs 0.3 -gapopen -5 -ConClave 2 -nf -matrix`
-    run(pipeline(cmd, stderr=log))
+    run(pipeline(cmd; stderr=log))
     nothing
 end
 
@@ -248,12 +256,12 @@ function kma_nanopore(
     inpath::AbstractString,
     outbase::AbstractString,
     db::AbstractString,
-    log::AbstractString
+    log::AbstractString,
 )
     cmd = `kma -i $inpath -o $outbase -t_db $db
     -mp 20 -bc 0.7 -t $(Threads.nthreads()) -1t1 -mrs 0.3 -ConClave 2 -bcNano
     -nf -matrix`
-    run(pipeline(cmd, stderr=log))
+    run(pipeline(cmd; stderr=log))
 end
 
 "Return vec of deduplicated, set of segments with asms removed"
@@ -267,7 +275,8 @@ function deduplicate(asms::Vector{Assembly})::Tuple{Vector{Assembly}, Set{Segmen
 
     # If fewer than half of segments are duplicated, we have extra strict criteria
     # and are more likely to deduplicate the other segments
-    few_duplicated = 2 * sum(i -> length(i) > 1, values(bysegment), init=0) < length(bysegment)
+    few_duplicated =
+        2 * sum(i -> length(i) > 1, values(bysegment); init=0) < length(bysegment)
 
     toremove = Set{Assembly}()
     deduplicated = Dict(k => Set{Assembly}() for k in keys(bysegment))
@@ -291,10 +300,10 @@ function deduplicate(asms::Vector{Assembly})::Tuple{Vector{Assembly}, Set{Segmen
         addcurrent && push!(set, asm)
         setdiff!(set, toremove)
     end
-    final_segments = reduce(values(deduplicated), init=Assembly[]) do v, set
+    final_segments = reduce(values(deduplicated); init=Assembly[]) do v, set
         append!(v, set)
     end
-    dedup_seg = Set(k for (k,v) in deduplicated if length(v) < length(bysegment[k]))
+    dedup_seg = Set(k for (k, v) in deduplicated if length(v) < length(bysegment[k]))
     return (final_segments, dedup_seg)
 end
 
@@ -336,7 +345,7 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
     end
 
     aln = alignment(
-        pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL)
+        pairalign(OverlapAlignment(), a.seq, b.seq, DEFAULT_DNA_ALN_MODEL),
     )::PairwiseAlignment
     id = alignment_identity(OverlapAlignment(), aln)
 
@@ -360,10 +369,7 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
     # The thresholds below are generous thresholds based on measuring 16,000 reference pairs.
     # If we have too many assemblies at this point, the assemblies might begin to converge
     # in local part of the sequence only. This will cause ksim to shoot up and will be detected here.
-    max_ksim = id > 0.95 ? 0.75 :
-        id > 0.9 ? 0.5 :
-        id > 0.85 ? 0.25 :
-        0.2
+    max_ksim = id > 0.95 ? 0.75 : id > 0.9 ? 0.5 : id > 0.85 ? 0.25 : 0.2
 
     if ksim > max_ksim
         return naively_better
@@ -381,7 +387,11 @@ end
 
 # Is the depths such that there are large sections where both query is much deeper
 # than reference and sections where the oppotiste is true?
-function is_mutually_much_deeper(aln::PairwiseAlignment, query::Assembly, ref::Assembly)::Bool
+function is_mutually_much_deeper(
+    aln::PairwiseAlignment,
+    query::Assembly,
+    ref::Assembly,
+)::Bool
     n_q_deeper = n_r_deeper = 0
     q_index = r_index = 0
     n_matches = 0
@@ -409,7 +419,7 @@ function is_mutually_much_deeper(aln::PairwiseAlignment, query::Assembly, ref::A
 end
 
 # Whether a is significantly deeper than "than"
-is_much_deeper(a::Integer, than::Integer)::Bool = (max(a, than) > 50) & (a > 5*than)
+is_much_deeper(a::Integer, than::Integer)::Bool = (max(a, than) > 50) & (a > 5 * than)
 
 function kmer_jaccard_sim(a::Assembly, b::Assembly)
     s1 = Set(i.fw for i in each(DNAMer{31}, a.seq))
@@ -423,13 +433,13 @@ function parse_fna(
     fsa_path::AbstractString,
     res_path::AbstractString,
     mat_path::AbstractString,
-    ref_dict::Dict{String, Reference}
+    ref_dict::Dict{String, Reference},
 )::Vector{Assembly}
     res = open(io -> parse_res(io, res_path), res_path)
     res_by_header = Dict(i.template => i for i in res)
     depths_by_header = Dict(
-        name => parse_depth_vector(v)
-        for (name, v) in open(io -> parse_mat(io, mat_path), GzipDecompressorStream, mat_path)
+        name => parse_depth_vector(v) for (name, v) in
+        open(io -> parse_mat(io, mat_path), GzipDecompressorStream, mat_path)
     )
     open(FASTA.Reader, fsa_path) do reader
         asms = Assembly[]
@@ -442,7 +452,7 @@ function parse_fna(
             name = String(strip(header))
             segment = ref_dict[name].segment
             seq = FASTA.sequence(LongDNASeq, record)
-            
+
             # Query and template identity are calculated differently, because gap
             # positions in query/template are not counted towards identity.
             # Hence an upper bound of the total alignment identity is the minimum
@@ -458,9 +468,9 @@ function parse_depth_vector(depths_vector::Vector{<:Tuple{DNA, Tuple{Vararg{Inte
     res = UInt32[]
     for (_dna, deps) in depths_vector
         n_gaps = last(deps)
-        biggest = maximum(deps[1:lastindex(deps)-1])
+        biggest = maximum(deps[1:(lastindex(deps) - 1)])
         if n_gaps ≤ biggest
-            nongaps = sum(deps[1:lastindex(deps)-1], init=zero(eltype(deps)))
+            nongaps = sum(deps[1:(lastindex(deps) - 1)]; init=zero(eltype(deps)))
             push!(res, UInt32(nongaps))
         end
     end
@@ -470,16 +480,16 @@ end
 function has_converged(
     assemblies::Vector{Assembly},
     dedup_segment::Set{Segment},
-    convergence_threshold::AbstractFloat
+    convergence_threshold::AbstractFloat,
 )::Tuple{Bool, Vector{<:NamedTuple{(:template, :segment, :isconverged, :identity)}}}
     convergence = map(assemblies) do assembly
         template = assembly.name
         isconverged = let
             assembly.identity ≥ convergence_threshold &&
-            # Non-1.0 coverage implies indels, which often linger around and necessitate
-            # additional rounds. We allow float rounding error here.
-            assembly.coverage > 0.999999 &&
-            assembly.coverage < 1.000001
+                # Non-1.0 coverage implies indels, which often linger around and necessitate
+                # additional rounds. We allow float rounding error here.
+                assembly.coverage > 0.999999 &&
+                assembly.coverage < 1.000001
         end
         identity = assembly.identity
         segment = assembly.segment
@@ -496,7 +506,7 @@ function save_deduplicated(
     outpath::AbstractString,
     assemblies::Vector{Assembly},
     old_seq_dict::Dict{String, LongDNASeq},
-    dedup_segments::Set{Segment}
+    dedup_segments::Set{Segment},
 )::Dict{String, LongDNASeq}
     open(FASTA.Writer, outpath) do writer
         result = Dict{String, LongDNASeq}()
@@ -536,7 +546,9 @@ using Influenza: Influenza
 
 if abspath(PROGRAM_FILE) == @__FILE__
     if length(ARGS) ∉ (9, 10)
-        error("Usage: julia iter_asm.jl samplename refjson templatepath respath outdir logdir k threshold read1 [read2]")
+        error(
+            "Usage: julia iter_asm.jl samplename refjson templatepath respath outdir logdir k threshold read1 [read2]",
+        )
     end
     samplename, jsonpath, templatepath, respath, outdir, logdir = ARGS[1:6]
     refdict = let
@@ -552,6 +564,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     old_seq_dict = SelectTemplates.main(samplename, templatepath, refdict, respath)
     IterativeAssembly.main(
-        samplename, refdict, readpaths, templatepath, old_seq_dict, outdir, logdir, k, threshold
+        samplename,
+        refdict,
+        readpaths,
+        templatepath,
+        old_seq_dict,
+        outdir,
+        logdir,
+        k,
+        threshold,
     )
 end

@@ -10,8 +10,17 @@ module Consensus
 using FASTX: FASTA
 using BioSequences: LongDNASeq, DNA, isgap, each, canonical, DNAMer
 using BioAlignments: BioAlignments, OverlapAlignment, pairalign
-using ErrorTypes: Option, some, none, unwrap, unwrap_or, @unwrap_or, and_then, map_or, is_error
-using Influenza: Influenza, Sample, Segment, Assembly, Reference, AlignedAssembly, Protein, DEFAULT_DNA_ALN_MODEL
+using ErrorTypes:
+    Option, some, none, unwrap, unwrap_or, @unwrap_or, and_then, map_or, is_error
+using Influenza:
+    Influenza,
+    Sample,
+    Segment,
+    Assembly,
+    Reference,
+    AlignedAssembly,
+    Protein,
+    DEFAULT_DNA_ALN_MODEL
 using KMATools: KMATools
 using Printf: @sprintf
 using CodecZlib: GzipDecompressorStream, GzipCompressorStream
@@ -28,11 +37,9 @@ struct ErrorTooManyIndels <: Influenza.ProteinError
     n::UInt32
 end
 
-function Base.print(io::IO, x::ErrorTooManyIndels)
-    print(io, "Too many indel errors, found ", x.n)
-end
+Base.print(io::IO, x::ErrorTooManyIndels) = print(io, "Too many indel errors, found ", x.n)
 
-const _IMPORTANT = Tuple(Bool[1,1,0,0,1,0,1,1,1,1,1,1,1,0,1,1,1])
+const _IMPORTANT = Tuple(Bool[1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1])
 @assert length(_IMPORTANT) == length(instances(Protein))
 is_important(x::Protein) = @inbounds _IMPORTANT[reinterpret(UInt8, x) + 0x01]
 

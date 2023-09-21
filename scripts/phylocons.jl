@@ -14,7 +14,7 @@ using FASTX: FASTA
 
 function main(
     internal_path::AbstractString, # path of internal.jls.gz object
-    outdir::AbstractString # directory to create
+    outdir::AbstractString, # directory to create
 )
     parent = dirname(rstrip(rstrip(outdir, '/'), '\\'))
     (isempty(parent) || isdir(parent)) || error("Parent directory of output does not exist")

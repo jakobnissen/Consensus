@@ -26,7 +26,10 @@ assembly_depth(d::Depths) = _mean_depth(d.assembly_depths)
 const KMARowType = Tuple{DNA, NTuple{6, UInt32}}
 const MatType = Vector{Tuple{String, Vector{KMARowType}}}
 
-function Depths(template_mapping::Vector{KMARowType}, assembly_mapping::Vector{KMARowType})::Depths
+function Depths(
+    template_mapping::Vector{KMARowType},
+    assembly_mapping::Vector{KMARowType},
+)::Depths
     # Template depths: All positions of template mapping, except if 
     # it's a gap in the template
     template_depths = UInt32[]
@@ -51,17 +54,14 @@ end
 function load_depths_and_errors(
     alnasms::Vector{AlignedAssembly},
     template_mat_path::AbstractString,
-    assembly_mat_path::AbstractString
+    assembly_mat_path::AbstractString,
 )::Vector{Depths}
     index_by_refheader = Dict(a.reference.name => i for (i, a) in enumerate(alnasms))
     @assert length(index_by_refheader) == length(alnasms)
-    header_depths = load_depths(
-        template_mat_path,
-        assembly_mat_path,
-        Set(keys(index_by_refheader)),
-    )
+    header_depths =
+        load_depths(template_mat_path, assembly_mat_path, Set(keys(index_by_refheader)))
     # Reorder depths to have same order as alnasms
-    sort!(header_depths, by=i -> index_by_refheader[i[1]])
+    sort!(header_depths; by=i -> index_by_refheader[i[1]])
     depths = map(last, header_depths)
     for i in eachindex(depths, alnasms)
         add_depths_errors!(alnasms[i], depths[i])
@@ -112,12 +112,9 @@ function load_depths(
     return result
 end
 
-function add_depths_errors!(
-    alnasm::AlignedAssembly,
-    depth::Depths
-)::Nothing
+function add_depths_errors!(alnasm::AlignedAssembly, depth::Depths)::Nothing
     # Assembly too short
-    if length(depth.assembly_depths) < 2*TERMINAL + 1
+    if length(depth.assembly_depths) < 2 * TERMINAL + 1
         push!(alnasm.errors, Influenza.ErrorTooShort(length(depth.assembly_depths)))
     end
 
@@ -139,7 +136,7 @@ end
 in order to be able to refer to e.g. PB1 # 2 unambiguously."
 function order_alnasms(
     alnasms::Vector{AlignedAssembly},
-    depths::Vector{Depths}
+    depths::Vector{Depths},
 )::Vector{UInt8}
     bysegment = Dict{Segment, Vector{Tuple{AlignedAssembly, Depths}}}()
     for i in eachindex(alnasms, depths)
@@ -149,7 +146,7 @@ function order_alnasms(
     result = zeros(UInt8, length(alnasms))
     indexof = Dict(a => i for (i, a) in enumerate(alnasms))
     for (_, v) in bysegment
-        sort!(v, rev=true, by=i->assembly_depth(last(i)))
+        sort!(v; rev=true, by=i -> assembly_depth(last(i)))
         for (i, (alnasm, _)) in enumerate(v)
             result[indexof[alnasm]] = i
         end

@@ -44,16 +44,16 @@ function remove_primers(
     seq::NucleotideSeq,
     primers::Vector{<:Tuple{String, NucleotideSeq}},
     minlength::Int,
-    fuzzylen::Int
+    fuzzylen::Int,
 )
     result = seq
-    overlaps = [slide!(p, seq, minlength, fuzzylen) for (_,p) in primers]
+    overlaps = [slide!(p, seq, minlength, fuzzylen) for (_, p) in primers]
     if maximum(overlaps) > 0
         i = argmax(overlaps)
         overlap = overlaps[i]
         header = primers[i][1]
         println("Primer $header found in $seqheader with overlap $overlap")
-        result = result[1+overlap:end]
+        result = result[(1 + overlap):end]
     end
     return result
 end
@@ -62,7 +62,7 @@ function remove_primers(
     seqs::Vector{Tuple{String, LongDNASeq}},
     primers::Vector{Tuple{String, LongDNASeq}},
     minlength::Int,
-    fuzzylen::Int
+    fuzzylen::Int,
 )::Vector{Tuple{String, LongDNASeq}}
     isempty(seqs) || isempty(primers) && return copy(seqs)
     result = empty(seqs)
@@ -80,7 +80,7 @@ function trim_consensus(
     consensuspath::String,
     output::String,
     minlength::Int,
-    fuzzylen::Int
+    fuzzylen::Int,
 )
     primers = load_fna(primerpath)
     # Quick path if no primers to check
@@ -99,7 +99,9 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     if length(ARGS) != 5
-        error("Usage: julia trim_consensus.jl primers.fna consensus.fna output.fna minlength fuzzylen")
+        error(
+            "Usage: julia trim_consensus.jl primers.fna consensus.fna output.fna minlength fuzzylen",
+        )
     end
     minlength = parse(Int, ARGS[4])
     minlength < 1 && error("Minlength must be one")

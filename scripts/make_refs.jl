@@ -16,7 +16,7 @@ struct ReferenceSet
 end
 
 ReferenceSet() = ReferenceSet(Dict{String, Reference}())
-ReferenceSet(itr) = reduce(push!, itr, init=ReferenceSet())
+ReferenceSet(itr) = reduce(push!, itr; init=ReferenceSet())
 Base.iterate(x::ReferenceSet, state...) = iterate(values(x.byid), state...)
 Base.length(x::ReferenceSet) = length(x.byid)
 Base.eltype(::Type{ReferenceSet}) = Reference
@@ -36,24 +36,23 @@ function Base.append!(x::ReferenceSet, y)
 end
 
 function load_refsets(paths::Vector{<:AbstractString})
-    return mapreduce(Influenza.load_references, append!, paths, init=ReferenceSet())
+    return mapreduce(Influenza.load_references, append!, paths; init=ReferenceSet())
 end
 
 """
 Checks the presence of the cd_hit executable.
 """
-function check_cd_hit()
-    try
-        process = run(`cd-hit-est`, wait=false)
+check_cd_hit() = try
+        process = run(`cd-hit-est`; wait=false)
         wait(process)
         return true
     catch
         return false
     end
-end
 
 function deduplicate(set::ReferenceSet, id::AbstractFloat, tmpdir=mktempdir())
-    check_cd_hit() || error("Command `cd-hit-est` could not be executed. Is the program in your PATH?")
+    check_cd_hit() ||
+        error("Command `cd-hit-est` could not be executed. Is the program in your PATH?")
     bysegment = Dict{Segment, Vector{Reference}}()
     for ref in set
         push!(get!(valtype(bysegment), bysegment, ref.segment), ref)
@@ -64,14 +63,14 @@ function deduplicate(set::ReferenceSet, id::AbstractFloat, tmpdir=mktempdir())
         results[i] = cd_hit_deduplicate(dat, id, tmpdir)
     end
 
-    return reduce(append!, results, init=ReferenceSet())
+    return reduce(append!, results; init=ReferenceSet())
 end
 
 "Deduplicate using CD-hit"
 function cd_hit_deduplicate(
     data::Vector{Reference},
     id::AbstractFloat,
-    tmpdir::String=mktempdir()
+    tmpdir::String=mktempdir(),
 )::Vector{Reference}
     # Create FASTA file
     isdir(tmpdir) || error("Directory not found $tmpdir")
@@ -100,7 +99,7 @@ end
 function run_cd_hit(path::AbstractString, id::AbstractFloat)
     outfile = path * ".cdhit"
     command = `cd-hit-est -i $path -o $outfile -aS 0.95 -n 9 -c $(id) -d 32 -T 2 -M 4000`
-    pipe = pipeline(command, stdout="$path.log")
+    pipe = pipeline(command; stdout="$path.log")
     run(pipe)
     return outfile
 end

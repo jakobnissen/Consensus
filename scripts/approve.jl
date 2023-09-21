@@ -27,12 +27,9 @@ function main(path)
 end
 
 "Change the approved Bool value in internal type"
-function change_approval!(
-    internal::Vector{INTERNAL_TYPE},
-    chosen::Set{Int},
-)
+function change_approval!(internal::Vector{INTERNAL_TYPE}, chosen::Set{Int})
     for (i, x) in enumerate(internal)
-        internal[i] = (;x.sample, x.alnasm, x.depths, passed=in(i, chosen), x.order)
+        internal[i] = (; x.sample, x.alnasm, x.depths, passed=in(i, chosen), x.order)
     end
 end
 
@@ -41,11 +38,7 @@ function dump_sequences(internal::Vector{INTERNAL_TYPE})
     bysample = Dict{Sample, Any}()
     for x in internal
         if !haskey(bysample, x.sample)
-            bysample[x.sample] = (
-                Influenza.AlignedAssembly[],
-                Bool[],
-                UInt8[]
-            )
+            bysample[x.sample] = (Influenza.AlignedAssembly[], Bool[], UInt8[])
         end
         push!(bysample[x.sample][1], x.alnasm)
         push!(bysample[x.sample][2], x.passed)
@@ -53,9 +46,9 @@ function dump_sequences(internal::Vector{INTERNAL_TYPE})
     end
     for (sample, tup) in bysample
         path = joinpath("sequences", Influenza.nameof(sample))
-        
+
         # Remove existing paths
-        for filename in readdir(path, join=true)
+        for filename in readdir(path; join=true)
             if endswith(filename, ".fna") || endswith(filename, ".faa")
                 rm(filename)
             end

@@ -18,7 +18,10 @@ function load_aligned_assemblies(
     return result
 end
 
-function load_assembly(path::AbstractString, segment_map::Dict{String, Segment})::Vector{Assembly}
+function load_assembly(
+    path::AbstractString,
+    segment_map::Dict{String, Segment},
+)::Vector{Assembly}
     map(open(collect, FASTA.Reader, path)) do record
         temp_asm = Assembly(record, nothing)
         segment = segment_map[temp_asm.name]
@@ -28,7 +31,7 @@ end
 
 function pair_references(
     asms::Vector{Vector{Assembly}},
-    refs::Vector{Reference}
+    refs::Vector{Reference},
 )::Vector{Vector{Reference}}
     accessions = Set{String}()
     for asmv in asms, asm in asmv
@@ -57,7 +60,8 @@ end
 
 function add_alnasm_errors!(alnasm::AlignedAssembly)
     # Low identity to reference
-    alnasm.identity < 0.8 && push!(alnasm.errors, Influenza.ErrorLowIdentity(alnasm.identity))
+    alnasm.identity < 0.8 &&
+        push!(alnasm.errors, Influenza.ErrorLowIdentity(alnasm.identity))
     return nothing
 end
 
@@ -88,13 +92,13 @@ function write_sequences(
     sample::Sample,
     alnasms::Vector{AlignedAssembly},
     passed::Vector{Bool},
-    order::Vector{UInt8}
+    order::Vector{UInt8},
 )
     isdir(seq_dir_name) || mkpath(seq_dir_name)
-    file_contents = Dict(i*j => FASTA.Record[]
-        for i in ["all", "primary", "secondary"],
-            j in [".fna", ".faa"]
-        )
+    file_contents = Dict(
+        i * j => FASTA.Record[] for i in ["all", "primary", "secondary"],
+        j in [".fna", ".faa"]
+    )
     for i in eachindex(alnasms, passed, order)
         alnasm = alnasms[i]
         asm = alnasm.assembly
@@ -162,4 +166,3 @@ function dna_str(seq::LongDNASeq, insig::Option{<:AbstractVector{Bool}})
     end
     return String(vec)
 end
-
