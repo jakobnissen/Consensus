@@ -8,7 +8,7 @@ module SelectTemplates
 using Influenza: Segment, Reference, load_references
 using FASTX: FASTA
 using BioSequences: LongDNASeq
-import KMATools: KMATools
+using KMATools: KMATools
 
 imap(f) = x -> Iterators.map(f, x)
 
@@ -127,6 +127,7 @@ using BioSequences: LongDNASeq, each, DNAMer, DNA, isgap
 using BioAlignments: pairalign, alignment, OverlapAlignment, PairwiseAlignment
 using KMATools: parse_res, parse_mat
 using CodecZlib: GzipDecompressorStream
+using KMA_jll
 
 # Currently KMA is pretty bad at handling indels, and may take MANY iterations
 # (say, 10 or 15) to handle large indels in NA stalk.
@@ -236,7 +237,7 @@ function main(
 end
 
 function index(input::AbstractString, outbase::AbstractString, k::Int, log::AbstractString)
-    run(pipeline(`kma index -nbp -k $k -i $input -o $outbase`; stderr=log))
+    run(pipeline(`$(kma_index()) -nbp -k $k -i $input -o $outbase`; stderr=log))
 end
 
 function kma_illumina(
@@ -246,7 +247,7 @@ function kma_illumina(
     db::AbstractString,
     log::AbstractString,
 )
-    cmd = `kma -ipe $infw $inrv -o $outbase -t_db $db
+    cmd = `$(kma()) -ipe $infw $inrv -o $outbase -t_db $db
     -t $(Threads.nthreads()) -1t1 -mrs 0.3 -gapopen -5 -ConClave 2 -nf -matrix`
     run(pipeline(cmd; stderr=log))
     nothing
@@ -258,7 +259,7 @@ function kma_nanopore(
     db::AbstractString,
     log::AbstractString,
 )
-    cmd = `kma -i $inpath -o $outbase -t_db $db
+    cmd = `$(kma()) -i $inpath -o $outbase -t_db $db
     -mp 20 -bc 0.7 -t $(Threads.nthreads()) -1t1 -mrs 0.3 -ConClave 2 -bcNano
     -nf -matrix`
     run(pipeline(cmd; stderr=log))

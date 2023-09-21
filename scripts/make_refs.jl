@@ -42,7 +42,8 @@ end
 """
 Checks the presence of the cd_hit executable.
 """
-check_cd_hit() = try
+check_cd_hit() =
+    try
         process = run(`cd-hit-est`; wait=false)
         wait(process)
         return true
