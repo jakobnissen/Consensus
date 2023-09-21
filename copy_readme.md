@@ -28,6 +28,11 @@ The `template` file measures depth relative to the original reference it assembl
 The `assembly` measures depth relative to itself. These may differ if there are indels or
 significant nucleotide differences between reference and assembly
 
+The raw values displayed in the plots are available in the .tsv files. Here, the "order"
+field is relevant if there are multiple different types of the same segment in the same
+sample. Then, the segments are ordered (approximately) by depth such that the segment
+with order 1 is the most abundant.
+
 ### sequences
 Each sample has 6 files in this directory: `all`, `secondary` and `primary`, each of these
 with two endings, `.fna` and `.faa`. `.fna` signifies DNA, `.faa` amino acids.

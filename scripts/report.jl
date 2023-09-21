@@ -1,5 +1,5 @@
 using Consensus: Consensus
-using CodecZlib: GzipDecompressorStream
+using CodecZlib: GzipDecompressorStream, GzipCompressorStream
 using Serialization: deserialize
 using Influenza: Sample, Segment
 
@@ -14,6 +14,18 @@ function plot_depths(
     Plots.savefig(make_depth_plot([(s, d.template_depths) for (s, d) in v]), template_path)
     Plots.savefig(make_depth_plot([(s, d.assembly_depths) for (s, d) in v]), assembly_path)
     return nothing
+end
+
+function make_depth_tsv(path::String,  data::Vector{Consensus.INTERNAL_TYPE}, depths_getter::Function)
+    open(GzipCompressorStream, path, "w") do io
+        println(io, "sample\tsegment\torder\tpos\tdepth")
+        for (sample, alnasm, depths, passed, order) in data
+            segment = alnasm.reference.segment
+            for (pos, depth) in enumerate(depths_getter(depths))
+                println(io, join((sample, segment, order, pos, depth), '\t'))
+            end
+        end
+    end
 end
 
 function make_depth_plot(v::Vector{<:Tuple{Segment, Vector{<:Unsigned}}})
@@ -48,7 +60,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     tmpdir = joinpath(outdir, "tmp")
     alndir = joinpath(tmpdir, "aln")
     consdir = joinpath(outdir, "sequences")
-    plotdir = joinpath(outdir, "depths")
+    depthsdir = joinpath(outdir, "depths")
     
     Consensus.snakemake_entrypoint(reportpath, refdir, alndir, consdir, tmpdir, illumina, similar)
 
@@ -63,8 +75,12 @@ if abspath(PROGRAM_FILE) == @__FILE__
         push!(bysample[s], (a.reference.segment, d))
     end
     for (sample, v) in bysample
-        tpath = joinpath(plotdir, nameof(sample) * "_template.pdf")
-        apath = joinpath(plotdir, nameof(sample) * "_assembly.pdf")
+        tpath = joinpath(depthsdir, nameof(sample) * "_template.pdf")
+        apath = joinpath(depthsdir, nameof(sample) * "_assembly.pdf")
         plot_depths(tpath, apath, v)
     end
+
+    # I hate this code pattern but whatever
+    make_depth_tsv(joinpath(depthsdir, "template.tsv.gz"), data, x -> x.template_depths)
+    make_depth_tsv(joinpath(depthsdir, "assembly.tsv.gz"), data, x -> x.assembly_depths)
 end
