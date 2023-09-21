@@ -7,3 +7,4 @@ site
 InfluenzaReport.jl/Manifest.toml
 *.code-workspace
 __pycache__
+.snakemake
