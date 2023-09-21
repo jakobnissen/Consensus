@@ -1,0 +1,4 @@
+{
+    "max_low_depth_bases": 500,
+    "depth_threshold": 25
+}

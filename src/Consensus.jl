@@ -43,6 +43,7 @@ const _IMPORTANT = Tuple(Bool[1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1]
 @assert length(_IMPORTANT) == length(instances(Protein))
 is_important(x::Protein) = @inbounds _IMPORTANT[reinterpret(UInt8, x) + 0x01]
 
+include("config.jl")
 include("readqc.jl")
 include("alignedassembly.jl")
 include("depths.jl")

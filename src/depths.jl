@@ -55,6 +55,7 @@ function load_depths_and_errors(
     alnasms::Vector{AlignedAssembly},
     template_mat_path::AbstractString,
     assembly_mat_path::AbstractString,
+    config::Config,
 )::Vector{Depths}
     index_by_refheader = Dict(a.reference.name => i for (i, a) in enumerate(alnasms))
     @assert length(index_by_refheader) == length(alnasms)
@@ -64,7 +65,7 @@ function load_depths_and_errors(
     sort!(header_depths; by=i -> index_by_refheader[i[1]])
     depths = map(last, header_depths)
     for i in eachindex(depths, alnasms)
-        add_depths_errors!(alnasms[i], depths[i])
+        add_depths_errors!(alnasms[i], depths[i], config)
     end
     return depths
 end
@@ -112,7 +113,7 @@ function load_depths(
     return result
 end
 
-function add_depths_errors!(alnasm::AlignedAssembly, depth::Depths)::Nothing
+function add_depths_errors!(alnasm::AlignedAssembly, depth::Depths, config::Config)::Nothing
     # Assembly too short
     if length(depth.assembly_depths) < 2 * TERMINAL + 1
         push!(alnasm.errors, Influenza.ErrorTooShort(length(depth.assembly_depths)))
@@ -125,7 +126,7 @@ function add_depths_errors!(alnasm::AlignedAssembly, depth::Depths)::Nothing
     end
 
     # Too many low coverage positions in assembly
-    n_lowdepth = count(i -> i < 25, depth.assembly_depths)
+    n_lowdepth = count(i -> i < config.depth_threshold, depth.assembly_depths)
     if !iszero(n_lowdepth)
         push!(alnasm.errors, Influenza.ErrorLowDepthBases(n_lowdepth))
     end

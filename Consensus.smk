@@ -3,6 +3,9 @@ import os
 import json
 
 SNAKEDIR = os.path.dirname(workflow.snakefile)
+CONFIG_PATH = os.path.join(SNAKEDIR, "config.json")
+configfile: CONFIG_PATH
+
 sys.path.append(os.path.join(SNAKEDIR, "scripts"))
 import tools
 
@@ -12,7 +15,15 @@ JULIA_COMMAND = f"julia --project='{SNAKEDIR}' --startup-file=no"
 # GLOBAL CONSTANTS
 ######################################################
 # We accept "pore" for backwards compatibility.
-KNOWN_CONFIGS = {'readdir', 'platform', 'pore', 'ref', 'selfsimilar'}
+KNOWN_CONFIGS = {
+    'readdir',
+    'platform',
+    'pore',
+    'ref',
+    'selfsimilar',
+    'max_low_depth_bases',
+    'depth_threshold',
+}
 for key in config:
     if key not in KNOWN_CONFIGS:
         raise KeyError(
@@ -108,7 +119,7 @@ rule all:
     shell:
         "cp {params:q}/copy_readme.md README_CONSENSUS.md && "
         "echo -n 'Consensus.jl commit version: ' > {output} && "
-        "(git -C {params:q} rev-parse --short HEAD >> {output} || true) &&"
+        "(git -C {params:q} rev-parse --short HEAD >> {output} || true) && "
         "julia -v >> {output}"
 
 #################################
@@ -281,9 +292,10 @@ rule create_report:
         scriptpath=f"{SNAKEDIR}/scripts/report.jl",
         refdir=REFDIR,
         platform='illumina' if IS_ILLUMINA else 'nanopore',
-        similar=int(SELF_SIMILAR)
+        similar=int(SELF_SIMILAR),
+        config_path=CONFIG_PATH
     log: "tmp/log/report_consensus.txt"
     threads: workflow.cores
     shell: 
         "{params.juliacmd} -t {threads} {params.scriptpath:q} "
-        "{params.platform} {params.similar} . {params.refdir:q} > {log}"
+        "{params.platform} {params.similar} . {params.refdir:q} {params.config_path} > {log}"

@@ -6,8 +6,8 @@ function snakemake_entrypoint(
     aln_dir::AbstractString, # dir of kma aln
     seq_dir::AbstractString,
     tmp_dir::AbstractString,
-    is_illumina::Bool,
     similar::Bool,
+    config::Config,
 )::Nothing
     samples = map(Sample, sort!(filter!(i -> !startswith(i, '.'), readdir(aln_dir))))
     paths = map(samples) do sample
@@ -30,7 +30,8 @@ function snakemake_entrypoint(
     end
     depths = Vector{Vector{Depths}}(undef, length(aln_asms))
     Threads.@threads for i in 1:length(depths)
-        depths[i] = load_depths_and_errors(aln_asms[i], paths[i].t_depth, paths[i].a_depth)
+        depths[i] =
+            load_depths_and_errors(aln_asms[i], paths[i].t_depth, paths[i].a_depth, config)
     end
     segmentorder = map(i -> order_alnasms(i...), zip(aln_asms, depths))
 
@@ -51,7 +52,7 @@ function snakemake_entrypoint(
         aln_asms,
         depths,
         read_stats,
-        is_illumina,
+        config,
         similar,
     )
 
@@ -77,7 +78,7 @@ function report(
     alnasms::Vector{Vector{AlignedAssembly}},
     depths::Vector{Vector{Depths}},
     read_stats::Vector{<:ReadStats},
-    is_illumina::Bool,
+    config::Config,
     similar::Bool,
 )::Vector{Vector{Bool}}
     passed = Vector{Bool}[]
@@ -91,7 +92,7 @@ function report(
                 alnasms[i],
                 depths[i],
                 read_stats[i],
-                is_illumina,
+                config,
             )
             push!(passed, v)
         end
@@ -112,7 +113,7 @@ function report(
     alnasms::Vector{AlignedAssembly},
     depths::Vector{Depths},
     read_stats::ReadStats,
-    is_illumina::Bool,
+    config::Config,
 )::Vector{Bool}
     indexof = Dict(a => i for (i, a) in enumerate(alnasms))
     passes = fill(false, length(alnasms))
@@ -138,7 +139,7 @@ function report(
     # Primary segments report
     for (i, data) in enumerate(primary)
         segment = Segment(i - 1)
-        (buf, pass) = report_segment(data, is_illumina)
+        (buf, pass) = report_segment(data, config)
         if data !== nothing
             alnasm, _ = data
             passes[indexof[alnasm]] = pass
@@ -153,7 +154,7 @@ function report(
         println(io, "\t[ POSSIBLE SUPERINFECTION ]")
         for i in aux
             alnasm, depth, order = i
-            _, pass = report_segment((alnasm, depth), is_illumina)
+            _, pass = report_segment((alnasm, depth), config)
             segment = alnasm.reference.segment
             print(
                 io,
@@ -172,7 +173,7 @@ end
 
 function report_segment(
     data::Union{Tuple{AlignedAssembly, Depths}, Nothing},
-    is_illumina::Bool,
+    config::Config,
 )::Tuple{IOBuffer, Bool}
     buf = IOBuffer()
     passed = true
@@ -187,8 +188,7 @@ function report_segment(
     # the other errors as they would just be spam. E.g. if the depth is < 5
     # or coverage is < 0.75
     critical_errors = filter(alnasm.errors) do error
-        (error isa Influenza.ErrorLowDepthBases && error.n > 500) ||
-            (error isa Influenza.ErrorLowCoverage && error.coverage < 0.75)
+        (error isa Influenza.ErrorLowDepthBases && error.n > config.max_low_depth_bases) || (error isa Influenza.ErrorLowCoverage && error.coverage < 0.75)
     end
     if !isempty(critical_errors)
         println(buf, "\t\tERROR ", first(critical_errors))
@@ -197,7 +197,7 @@ function report_segment(
     end
 
     for error in alnasm.errors
-        p = pass(error, is_illumina)
+        p = pass(error, config)
         println(buf, "\t\t", (p ? "      " : "ERROR "), error)
         passed &= p
     end
@@ -215,7 +215,7 @@ function report_segment(
         end
 
         for error in protein.errors
-            p = pass(error, is_illumina)
+            p = pass(error, config)
             println(buf, "\t\t", (p ? "      " : "ERROR "), protein.variant, ": ", error)
             passed &= (p || !is_important(protein.variant))
         end
@@ -232,23 +232,23 @@ function print_segment_header(io::IO, alnasm::AlignedAssembly, depth::Depths)
 end
 
 # fallback: segment errors fails
-pass(::Influenza.InfluenzaError, is_illumina::Bool) = false
+pass(::Influenza.InfluenzaError, ::Config) = false
 
 # Seems weird, but NA stalk can have 75 bp without any problems
-pass(x::Influenza.ErrorIndelTooBig, _::Bool) = length(x.indel) < 100
-pass(x::Influenza.ErrorEarlyStop, _::Bool) = x.observed_naa + 14 > x.expected_naa
-function pass(x::Influenza.ErrorInsignificant, is_illumina::Bool)
-    x.n_insignificant < ifelse(is_illumina, 5, 25)
+pass(x::Influenza.ErrorIndelTooBig, ::Config) = length(x.indel) < 100
+pass(x::Influenza.ErrorEarlyStop, ::Config) = x.observed_naa + 14 > x.expected_naa
+function pass(x::Influenza.ErrorInsignificant, config::Config)
+    x.n_insignificant < ifelse(config.is_illumina, 5, 25)
 end
-function pass(x::Influenza.ErrorAmbiguous, is_illumina::Bool)
-    x.n_ambiguous < ifelse(is_illumina, 5, 25)
+function pass(x::Influenza.ErrorAmbiguous, config::Config)
+    x.n_ambiguous < ifelse(config.is_illumina, 5, 25)
 end
-pass(x::Influenza.ErrorLateStop, is_illumina::Bool) = true
+pass(x::Influenza.ErrorLateStop, ::Config) = true
 
 # We fail with low depth because cross-contamination from other samples
 # can give enough reads to reconstruct a segment.
 # If more than 500 bp have lower than 25 depth, we can't trust it.
-pass(x::Influenza.ErrorLowDepthBases, is_illumina::Bool) = x.n < 500
+pass(x::Influenza.ErrorLowDepthBases, config::Config) = x.n < config.max_low_depth_bases
 
 function check_duplicates(
     io::IO,
