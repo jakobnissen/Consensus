@@ -8,7 +8,6 @@
 module Approve
 
 using Consensus: Consensus, INTERNAL_TYPE
-using Setfield
 using Influenza
 using CodecZlib
 using Serialization
@@ -33,7 +32,7 @@ function change_approval!(
     chosen::Set{Int},
 )
     for (i, x) in enumerate(internal)
-        internal[i] = @set x.passed = in(i, chosen)
+        internal[i] = (;x.sample, x.alnasm, x.depths, passed=in(i, chosen), x.order)
     end
 end
 
