@@ -27,6 +27,7 @@ using CodecZlib: GzipDecompressorStream, GzipCompressorStream
 using Serialization: Serialization
 using JSON3: JSON3
 using REPL: TerminalMenus
+using Plots: Plots
 
 const N_SEGMENTS = length(instances(Segment))
 const SegmentTuple{T} = NTuple{N_SEGMENTS, T}

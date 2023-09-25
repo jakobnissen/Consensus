@@ -12,7 +12,11 @@ function check_reads(path::AbstractString)::ReadStats
     bp = Int(obj[:summary][:after_filtering][:total_bases])::Int
     frac_bp_kept = bp / Int(obj[:summary][:before_filtering][:total_bases])::Int
     mean_read_len = Float64(obj[:summary][:after_filtering][:read1_mean_length])::Float64
-    r2_len = get(obj[:summary][:after_filtering], :read2_mean_length, nothing)::Union{Int, Nothing}
+    r2_len = get(
+        obj[:summary][:after_filtering],
+        :read2_mean_length,
+        nothing,
+    )::Union{Int, Nothing}
     if r2_len !== nothing
         mean_read_len = (mean_read_len + r2_len) / 2
     end

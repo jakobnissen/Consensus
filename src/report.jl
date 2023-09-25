@@ -5,6 +5,7 @@ function snakemake_entrypoint(
     ref_dir::AbstractString, # dir of .fna + .json ref files
     aln_dir::AbstractString, # dir of kma aln
     seq_dir::AbstractString,
+    depths_dir::AbstractString,
     tmp_dir::AbstractString,
     similar::Bool,
     config::Config,
@@ -45,6 +46,27 @@ function snakemake_entrypoint(
         segmentorder[i] = segmentorder[i][ord]
     end
 
+    depth_getters = (i -> i.template_depths, i -> i.assembly_depths)
+
+    # Write depths
+    for (path, getter) in zip(
+        (joinpath(depths_dir, "template.tsv.gz"), joinpath(depths_dir, "assembly.tsv.gz")),
+        depth_getters,
+    )
+        open(GzipCompressorStream, path, "w") do io
+            println(io, "sample\tsegment\torder\tpos\tdepth")
+            for (sample, aln_asm_v, depth_v, order_v) in
+                zip(samples, aln_asms, depths, segmentorder)
+                for (aln_asm, depth, order) in zip(aln_asm_v, depth_v, order_v)
+                    segment = aln_asm.reference.segment
+                    for (pos, depth_value) in enumerate(getter(depth))
+                        println(io, join((sample, segment, order, pos, depth_value), '\t'))
+                    end
+                end
+            end
+        end
+    end
+
     passes = report(
         report_path,
         samples,
@@ -62,6 +84,24 @@ function snakemake_entrypoint(
 
     open(GzipCompressorStream, joinpath(tmp_dir, "internal.jls.gz"), "w") do io
         serialize(io, samples, aln_asms, depths, passes, segmentorder)
+    end
+
+    # Make plots
+    for (sample, aln_asmv, depth_v) in zip(samples, aln_asms, depths)
+        for (path, getter) in zip(
+            (
+                joinpath(depths_dir, "$(sample)_template.pdf"),
+                joinpath(depths_dir, "$(sample)_assembly.pdf"),
+            ),
+            depth_getters,
+        )
+            Plots.savefig(
+                make_depth_plot([
+                    (a.reference.segment, getter(d)) for (a, d) in zip(aln_asmv, depth_v)
+                ]),
+                path,
+            )
+        end
     end
 
     return nothing
@@ -384,4 +424,15 @@ function alnid(a::LongDNASeq, b::LongDNASeq)::Float64
     # And this is only nothing if the identity is very low, but we already
     # checked with kmer overlap, so this should never happen
     Influenza.alignment_identity(OverlapAlignment(), aln)::Float64
+end
+
+function make_depth_plot(v::Vector{<:Tuple{Segment, Vector{<:Unsigned}}})
+    plt = Plots.plot(; ylabel="Log10 depths", xticks=nothing, ylim=(-0.1, 5))
+    for (segment, depth) in v
+        ys = log10.(depth)
+        xs = range(0.0; stop=1.0, length=length(ys))
+        index = Integer(segment) + 1
+        Plots.plot!(plt, xs, ys; label=string(segment), legend=:outertopright, color=index)
+    end
+    return plt
 end
