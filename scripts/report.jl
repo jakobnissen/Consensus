@@ -1,8 +1,4 @@
 using Consensus: Consensus
-using JSON3: JSON3
-
-# The plotting is outside the package because it blows up loading times :(
-using Plots: Plots
 
 if abspath(PROGRAM_FILE) == @__FILE__
     if length(ARGS) != 5
@@ -20,9 +16,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     end
 
     # Read config file
-    config = Consensus.Config(Dict(JSON3.read(config_path)), is_illumina)
     similar = parse(Bool, similar_str)
-
     reportpath = joinpath(outdir, "report_consensus.txt")
     tmpdir = joinpath(outdir, "tmp")
     alndir = joinpath(tmpdir, "aln")
@@ -30,6 +24,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     depthsdir = joinpath(outdir, "depths")
 
     Consensus.snakemake_entrypoint(
+        config_path,
         reportpath,
         refdir,
         alndir,
@@ -37,6 +32,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
         depthsdir,
         tmpdir,
         similar,
-        config,
+        is_illumina,
     )
 end

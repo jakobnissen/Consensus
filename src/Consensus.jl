@@ -51,6 +51,9 @@ include("depths.jl")
 include("serialization.jl")
 include("report.jl")
 
-precompile(snakemake_entrypoint, (String, String, String, String, String, Bool, Bool))
+precompile(
+    snakemake_entrypoint,
+    (String, String, String, String, String, String, String, Bool, Bool),
+)
 
 end # module

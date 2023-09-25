@@ -1,6 +1,7 @@
 const KMerSet = Set{DNAMer{16}}
 
 function snakemake_entrypoint(
+    config_path::AbstractString,
     report_path::AbstractString, # output report
     ref_dir::AbstractString, # dir of .fna + .json ref files
     aln_dir::AbstractString, # dir of kma aln
@@ -8,8 +9,10 @@ function snakemake_entrypoint(
     depths_dir::AbstractString,
     tmp_dir::AbstractString,
     similar::Bool,
-    config::Config,
+    is_illumina::Bool,
 )::Nothing
+    config = Config(Dict(JSON3.read(config_path)), is_illumina)
+
     samples = map(Sample, sort!(filter!(i -> !startswith(i, '.'), readdir(aln_dir))))
     paths = map(samples) do sample
         name = nameof(sample)
