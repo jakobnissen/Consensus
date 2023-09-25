@@ -11,7 +11,7 @@ function snakemake_entrypoint(
     similar::Bool,
     is_illumina::Bool,
 )::Nothing
-    config = Config(Dict(JSON3.read(config_path)), is_illumina)
+    config = Config(Dict(JSON3.read(config_path))::Dict{Symbol, Any}, is_illumina)::Config
 
     samples = map(Sample, sort!(filter!(i -> !startswith(i, '.'), readdir(aln_dir))))
     paths = map(samples) do sample
@@ -48,21 +48,21 @@ function snakemake_entrypoint(
         depths[i] = depths[i][ord]
         segmentorder[i] = segmentorder[i][ord]
     end
-
-    depth_getters = (i -> i.template_depths, i -> i.assembly_depths)
+    template_depths = [[d.template_depths for d in v] for v in depths]
+    assembly_depths = [[d.template_depths for d in v] for v in depths]
 
     # Write depths
-    for (path, getter) in zip(
-        (joinpath(depths_dir, "template.tsv.gz"), joinpath(depths_dir, "assembly.tsv.gz")),
-        depth_getters,
+    for (path, depth_vectors) in (
+        (joinpath(depths_dir, "template.tsv.gz"), template_depths),
+        (joinpath(depths_dir, "assembly.tsv.gz"), assembly_depths),
     )
         open(GzipCompressorStream, path, "w") do io
             println(io, "sample\tsegment\torder\tpos\tdepth")
             for (sample, aln_asm_v, depth_v, order_v) in
-                zip(samples, aln_asms, depths, segmentorder)
+                zip(samples, aln_asms, depth_vectors, segmentorder)
                 for (aln_asm, depth, order) in zip(aln_asm_v, depth_v, order_v)
                     segment = aln_asm.reference.segment
-                    for (pos, depth_value) in enumerate(getter(depth))
+                    for (pos, depth_value) in enumerate(depth_v)
                         println(io, join((sample, segment, order, pos, depth_value), '\t'))
                     end
                 end
@@ -90,17 +90,14 @@ function snakemake_entrypoint(
     end
 
     # Make plots
-    for (sample, aln_asmv, depth_v) in zip(samples, aln_asms, depths)
-        for (path, getter) in zip(
-            (
-                joinpath(depths_dir, "$(sample)_template.pdf"),
-                joinpath(depths_dir, "$(sample)_assembly.pdf"),
-            ),
-            depth_getters,
+    for (sample, aln_asmv, template_v, assembly_v) in zip(samples, aln_asms, template_depths, assembly_depths)
+        for (path, depths_vectors) in (
+            (joinpath(depths_dir, "$(sample)_template.pdf"), template_v),
+            (joinpath(depths_dir, "$(sample)_assembly.pdf"), assembly_v)
         )
             Plots.savefig(
                 make_depth_plot([
-                    (a.reference.segment, getter(d)) for (a, d) in zip(aln_asmv, depth_v)
+                    (a.reference.segment, d) for (a, d) in zip(aln_asmv, depths_vectors)
                 ]),
                 path,
             )
@@ -302,9 +299,9 @@ function check_duplicates(
 )
     kmers = map(zip(alnasms, passed)) do (av, pv)
         map(zip(av, pv)) do (a, p)
-            p ? kmerset(a.assembly.seq) : nothing
-        end
-    end
+            p ? some(kmerset(a.assembly.seq)) : none(KMerSet)
+        end::Vector{Option{KMerSet}}
+    end::Vector{Vector{Option{KMerSet}}}
     println(io, "Possibly duplicated samples:")
     for i in 1:(length(kmers) - 1), j in (i + 1):length(kmers)
         check_duplicates(
@@ -333,8 +330,8 @@ function check_duplicates(
     alnasms2::Vector{AlignedAssembly},
     passed1::Vector{Bool},
     passed2::Vector{Bool},
-    kmers1::Vector{<:Union{Nothing, KMerSet}},
-    kmers2::Vector{<:Union{Nothing, KMerSet}},
+    kmers1::Vector{Option{KMerSet}},
+    kmers2::Vector{Option{KMerSet}},
 )
     # Get a list of Bool for each segment, true if at least one segcopy
     # from both samples were passed.
@@ -361,8 +358,8 @@ function check_duplicates(
         # If the lengths are more than 25% different, they are surely not
         # identical. We do expect some length difference due to primers and such
         len1 / len2 > 0.75 || continue
-        k1 = kmers1[i]::KMerSet
-        k2 = kmers2[j]::KMerSet
+        k1 = unwrap(kmers1[i])
+        k2 = unwrap(kmers2[j])
 
         # The kmer overlap is an inaccurate, but faster way to check for similarity.
         # we use it here to quickly discard pairs which are clearly too different to
