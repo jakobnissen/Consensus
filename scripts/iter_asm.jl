@@ -325,7 +325,7 @@ function better(a::Assembly, b::Assembly, few_duplicated::Bool)::Union{Nothing, 
 
     # Shortest segment is > 850 bp, so 500 is absolute minimum to ensure the assembler
     # doesn't just assemble based on a few short streches
-    if min(length(a.seq), length(a.seq)) < 500
+    if min(length(a.seq), length(b.seq)) < 500
         return length(a.seq) < length(b.seq) ? b : a
     end
 

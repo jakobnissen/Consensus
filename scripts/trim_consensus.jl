@@ -64,7 +64,7 @@ function remove_primers(
     minlength::Int,
     fuzzylen::Int,
 )::Vector{Tuple{String, LongDNASeq}}
-    isempty(seqs) || isempty(primers) && return copy(seqs)
+    (isempty(seqs) || isempty(primers)) && return copy(seqs)
     result = empty(seqs)
     for (header, seq) in seqs
         seq = remove_primers(header, seq, primers, minlength, fuzzylen) # fw
